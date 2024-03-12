@@ -1,3 +1,7 @@
+use core::num;
+use std::ops::{AddAssign, MulAssign, Sub, SubAssign};
+
+use ndarray::{ArrayBase, ArrayView, LinalgScalar, ViewRepr};
 
 use crate::*;
 //we might need to define types for the dataset. each column can only have one type associated with it
@@ -32,14 +36,14 @@ pub enum DType<'a >{
 }
 
 pub(crate) trait BaseType<T>
-where T: Sized + Copy {}
+where T: Sized + LinalgScalar + AddAssign<T> + SubAssign<T>{}
 
 #[repr(C)]
-pub(crate) struct BaseMatrix<A: BaseType<A> + Copy>{
+pub(crate) struct BaseMatrix<A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>>{
     data: Array2<A>
 }
 
-impl<A: BaseType<A> + Copy> BaseMatrix<A>{
+impl<A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> BaseMatrix<A>{
     //@Sporadic Creator you're going to have to save me on this one :(
     // pub(crate) fn from_csv(sep: &str, fname: PathBuf) -> Self{ 
     // }
@@ -65,31 +69,90 @@ impl<A: BaseType<A> + Copy> BaseMatrix<A>{
 
 //@ViableCompute, I want you to implement std::ops::traits for BaseMatrix [add, sub, mult(dot and element wise), div, index(use the get() function)]. When we're done with that we'll write a more userfriendly API that will
 //be visible for our users, similar to pandas dataframe
-
-
-#[repr(C)]
-pub struct Dataset<'a, X: BaseType<X> + Copy, Y: BaseType<Y> + Copy>{
-    x_data: BaseMatrix<X>,
-    y_data: BaseMatrix<Y>,
-    fieldnames: Option<HashMap<String, int>>,
-    mean: Option<&'a [double]>,
-    std: Option<&'a [double]>,
-    max: Option<&'a [X]>,
-    min: Option<&'a [X]>,
+impl<A: BaseType<A> + AddAssign<A> + LinalgScalar + SubAssign<A>> std::ops::AddAssign<BaseMatrix<A>> for BaseMatrix<A>
+{
+    fn add_assign(&mut self, rhs: BaseMatrix<A>) {
+        assert_eq!(self.shape(), rhs.shape());
+        self.data += &rhs.data
+    }
+}
+impl<A: BaseType<A> + AddAssign<A> + LinalgScalar + SubAssign<A>> std::ops::AddAssign<&BaseMatrix<A>> for BaseMatrix<A>
+{
+    fn add_assign(&mut self, rhs: &BaseMatrix<A>) {
+        assert_eq!(self.shape(), rhs.shape());
+        self.data += &rhs.data
+    }
+}
+impl<A: BaseType<A> + AddAssign<A> + LinalgScalar + SubAssign<A>> std::ops::Add<BaseMatrix<A>> for BaseMatrix<A>
+{
+    type Output = BaseMatrix<A>;
+    fn add(self, mut rhs: BaseMatrix<A>) -> Self::Output {
+        rhs += &self;
+        rhs
+    }
 }
 
-impl <'a, X: BaseType<X> + Copy, Y: BaseType<Y> + Copy>  Dataset<'a, X, Y>{
-    pub fn from_base_matrix(x: BaseMatrix<X>, y: BaseMatrix<Y>, cached: bool) -> Self{
-        if cached{
-            //compute all the relevant stats for all the relevant cols(features), on creation
-            //if the type associated with a col is a String/object, ignore it
-            //which will be complete when the iterators for BaseMatrix is comlete 
-            todo!()
-        }
-        todo!()
+impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + AddAssign<A>> std::ops::SubAssign<BaseMatrix<A>> for BaseMatrix<A>
+{
+    fn sub_assign(&mut self, rhs: BaseMatrix<A>) {
+        assert_eq!(self.shape(), rhs.shape());
+        self.data -= &rhs.data
     }
-    pub fn from_csv(fname: PathBuf, sep: &str, ) -> Self{
-        todo!()
-    }
-
 }
+impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + AddAssign<A>> std::ops::SubAssign<&BaseMatrix<A>> for BaseMatrix<A>
+{
+    fn sub_assign(&mut self, rhs: &BaseMatrix<A>) {
+        assert_eq!(self.shape(), rhs.shape());
+        self.data -= &rhs.data
+    }
+}
+//Subtraction is not implemented yet
+
+impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + AddAssign<A>> std::ops::Index<usize> for BaseMatrix<A>
+{
+    type Output = [A];
+    fn index(&self, index: usize) -> &Self::Output {
+        self.get_row(index)
+    }
+}
+
+//Scalar Multiplication: Undone
+impl<A, T> std::ops::MulAssign<T> for BaseMatrix<A>
+where A: BaseType<A> + SubAssign<A> + LinalgScalar + AddAssign<A> + MulAssign<A>,
+      T: LinalgScalar
+{
+    fn mul_assign(&mut self, rhs: T) {
+        
+    }
+}
+impl<A, T> std::ops::Mul<T> for BaseMatrix<A>
+where A: BaseType<A> + SubAssign<A> + LinalgScalar + AddAssign<A> + MulAssign<A>,
+      T: LinalgScalar
+{
+    type Output = BaseMatrix<A>;
+    fn mul(self, rhs: T) -> Self::Output {
+        self
+    }
+}
+
+impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + MulAssign<A> + AddAssign<A>> std::ops::MulAssign<BaseMatrix<A>> for BaseMatrix<A>
+{
+    fn mul_assign(&mut self, rhs: BaseMatrix<A>) {
+        self.data *= &rhs.data
+    }
+}
+impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + MulAssign<A> + AddAssign<A>> std::ops::MulAssign<&BaseMatrix<A>> for BaseMatrix<A>
+{
+    fn mul_assign(&mut self, rhs: &BaseMatrix<A>) {
+        self.data *= &rhs.data
+    }
+}
+impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + MulAssign<A> + AddAssign<A>> std::ops::Mul<BaseMatrix<A>> for BaseMatrix<A>
+{
+    type Output = BaseMatrix<A>;
+    fn mul(self, rhs: BaseMatrix<A>) -> Self::Output {
+        //Uninmplemented because matrix multiplication is not commutative and i'll have to clone()
+        self
+    }
+}
+

@@ -13,7 +13,5 @@ ndarray = {version = "0.15.6", features = ["std", "serde", "rayon"]}
 [dev-dependencies]
 criterion = "0.3"
 
-[[bench]]
-name = "2d_benchmark"
-harness = false
+
 
