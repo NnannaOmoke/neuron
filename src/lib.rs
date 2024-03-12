@@ -6,6 +6,7 @@ pub(crate) use std::{
     fs::OpenOptions, 
     path::PathBuf,
     io::BufReader,
+    collections::HashMap,
 };
 pub(crate) use ndarray::{Array2, Ix2};
 use nalgebra;
@@ -21,4 +22,6 @@ use nalgebra;
 //we will use this to bench the performance of seperate 2d matrices with criterion
 //instead of pub(crate)-ing criterion, since we won't use it elsewhere we'll just import it privately
 mod base_array;
+
+
 

@@ -1,3 +1,4 @@
+
 use crate::*;
 //we might need to define types for the dataset. each column can only have one type associated with it
 pub(crate) type float = f32;
@@ -20,6 +21,15 @@ impl BaseType<double> for double{}
 impl BaseType<long> for long{}
 impl BaseType<long_long> for long_long{}
 
+#[derive(Debug, Copy, PartialEq, PartialOrd, Hash, Clone)]
+pub enum DType<'a >{
+    Nothing,
+    U32, 
+    U64,
+    F32, 
+    F64, 
+    Object(&'a str),//lmao
+}
 
 pub(crate) trait BaseType<T>
 where T: Sized + Copy {}
@@ -31,8 +41,7 @@ pub(crate) struct BaseMatrix<A: BaseType<A> + Copy>{
 
 impl<A: BaseType<A> + Copy> BaseMatrix<A>{
     //@Sporadic Creator you're going to have to save me on this one :(
-    // pub(crate) fn from_csv(sep: &str, fname: PathBuf) -> Self{
-        
+    // pub(crate) fn from_csv(sep: &str, fname: PathBuf) -> Self{ 
     // }
     pub(crate) fn transpose(self) -> Self{
         BaseMatrix{data: self.data.reversed_axes()}
@@ -57,3 +66,30 @@ impl<A: BaseType<A> + Copy> BaseMatrix<A>{
 //@ViableCompute, I want you to implement std::ops::traits for BaseMatrix [add, sub, mult(dot and element wise), div, index(use the get() function)]. When we're done with that we'll write a more userfriendly API that will
 //be visible for our users, similar to pandas dataframe
 
+
+#[repr(C)]
+pub struct Dataset<'a, X: BaseType<X> + Copy, Y: BaseType<Y> + Copy>{
+    x_data: BaseMatrix<X>,
+    y_data: BaseMatrix<Y>,
+    fieldnames: Option<HashMap<String, int>>,
+    mean: Option<&'a [double]>,
+    std: Option<&'a [double]>,
+    max: Option<&'a [X]>,
+    min: Option<&'a [X]>,
+}
+
+impl <'a, X: BaseType<X> + Copy, Y: BaseType<Y> + Copy>  Dataset<'a, X, Y>{
+    pub fn from_base_matrix(x: BaseMatrix<X>, y: BaseMatrix<Y>, cached: bool) -> Self{
+        if cached{
+            //compute all the relevant stats for all the relevant cols(features), on creation
+            //if the type associated with a col is a String/object, ignore it
+            //which will be complete when the iterators for BaseMatrix is comlete 
+            todo!()
+        }
+        todo!()
+    }
+    pub fn from_csv(fname: PathBuf, sep: &str, ) -> Self{
+        todo!()
+    }
+
+}
