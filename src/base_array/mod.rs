@@ -1,7 +1,7 @@
 use core::num;
 use std::ops::{AddAssign, MulAssign, Sub, SubAssign};
 
-use ndarray::{ArrayBase, ArrayView, LinalgScalar, ViewRepr};
+use ndarray::{iter::LanesIter, ArrayBase, ArrayView, Axis, Dim, LinalgScalar, Ix1, Ix2, ViewRepr};
 
 use crate::*;
 //we might need to define types for the dataset. each column can only have one type associated with it
@@ -54,18 +54,28 @@ impl<A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> BaseMatrix<A>{
         assert!(self.data.shape().len() == 2);
         (self.data.nrows(), self.data.ncols())
     }
-    pub(crate) fn get_col(&self, cindex: usize) -> &[A]{
-        self.data.column(cindex).to_slice().unwrap()
+    pub(crate) fn get_col(&self, cindex: usize) -> Option<&[A]> {
+        self.data.column(cindex).to_slice()
     }
-    pub(crate) fn get_row(&self, rindex: usize) -> &[A]{
-        self.data.row(rindex).to_slice().unwrap()
+    pub(crate) fn get_row(&self, rindex: usize) -> Option<&[A]> {
+        self.data.row(rindex).to_slice()
     }
     pub(crate) fn get(&self, rindex: usize, cindex: usize) -> A{
         *self.data.get((rindex, cindex)).unwrap()
     }
+
+    pub(crate) fn cols(&self) -> ColumnIter<'_, A> {
+        ColumnIter {
+            inner: self.data.columns().into_iter()
+        }
+    }
+
+    pub(crate) fn rows(&self) -> RowIter<'_, A> {
+        RowIter {
+            inner: self.data.rows().into_iter()
+        }
+    }
 }
-//here are the tasks: i.e. @sporadic_creator, please implement two iterators, one that will yield the cols, and the other the rows
-//i.e. a row iterator that yields a tuple containing the data in a row and a column iterator that yields the data in a column
 
 //@ViableCompute, I want you to implement std::ops::traits for BaseMatrix [add, sub, mult(dot and element wise), div, index(use the get() function)]. When we're done with that we'll write a more userfriendly API that will
 //be visible for our users, similar to pandas dataframe
@@ -112,7 +122,7 @@ impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + AddAssign<A>> std::ops::Inde
 {
     type Output = [A];
     fn index(&self, index: usize) -> &Self::Output {
-        self.get_row(index)
+        self.get_row(index).unwrap()
     }
 }
 
@@ -156,3 +166,26 @@ impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + MulAssign<A> + AddAssign<A>>
     }
 }
 
+pub(crate) struct ColumnIter<'a, A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> {
+    inner: LanesIter<'a, A, Ix1>,
+}
+
+impl<'a, A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> Iterator for ColumnIter<'a, A> {
+    type Item = ArrayBase<ViewRepr<&'a A>, Dim<[usize; 1]>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
+pub(crate) struct RowIter<'a, A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> {
+    inner: LanesIter<'a, A, Ix1>,
+}
+
+impl<'a, A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> Iterator for RowIter<'a, A> {
+    type Item = ArrayBase<ViewRepr<&'a A>, Dim<[usize; 1]>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
