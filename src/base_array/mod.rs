@@ -1,49 +1,313 @@
 use core::num;
-use std::ops::{AddAssign, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
 use ndarray::{iter::LanesIter, ArrayBase, ArrayView, Axis, Dim, LinalgScalar, Ix1, Ix2, ViewRepr};
 
 use crate::*;
-//we might need to define types for the dataset. each column can only have one type associated with it
-pub(crate) type float = f32;
-pub(crate) type int = i32;
-pub(crate) type unsigned_int = u32;
-pub(crate) type double = f64;
-pub(crate) type long = i64;
-pub(crate) type long_long = i128;
-//we'll have to so something about strings
-//if we have a numerical value that we can't parse, assume that the whole column is a string col
-pub(crate) type object = String;
 
-//These are the base types that each column must possess
-//to use them, we can take the types we have, alias them, and impl `BaseType` for them
-
-impl BaseType<float> for float{}
-impl BaseType<int> for int{}
-impl BaseType<unsigned_int> for unsigned_int{}
-impl BaseType<double> for double{}
-impl BaseType<long> for long{}
-impl BaseType<long_long> for long_long{}
-
-#[derive(Debug, Copy, PartialEq, PartialOrd, Hash, Clone)]
-pub enum DType<'a >{
-    Nothing,
-    U32, 
-    U64,
-    F32, 
-    F64, 
-    Object(&'a str),//lmao
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
+pub enum DType {
+    None,
+    U32(u32),
+    U64(u64),
+    F32(f32),
+    F64(f64),
+    Object(String),
 }
 
-pub(crate) trait BaseType<T>
-where T: Sized + LinalgScalar + AddAssign<T> + SubAssign<T>{}
+impl Add<&DType> for DType {
+    type Output = DType;
+
+    fn add(self, rhs: &DType) -> Self::Output {
+        match self {
+            // There has got to be a better way.
+            DType::None => rhs.clone(),
+            DType::U32(l) => match rhs {
+                DType::None => DType::U32(l),
+                DType::U32(r) => DType::U32(l + r),
+                DType::U64(r) => DType::U64(l as u64 + r),
+                DType::F32(r) => DType::F32(l as f32 + r),
+                DType::F64(r) => DType::F64(l as f64 + r),
+                DType::Object(_) => DType::U32(l),
+            },
+            DType::U64(l) => match rhs {
+                DType::None => DType::U64(l),
+                DType::U32(r) => DType::U64(l + *r as u64),
+                DType::U64(r) => DType::U64(l + r),
+                DType::F32(r) => DType::F32(l as f32 + r),
+                DType::F64(r) => DType::F64(l as f64 + r),
+                DType::Object(_) => DType::U64(l),
+            },
+            DType::F32(l) => match rhs {
+                DType::None => DType::F32(l),
+                DType::U32(r) => DType::F32(l + *r as f32),
+                DType::U64(r) => DType::F32(l + *r as f32),
+                DType::F32(r) => DType::F32(l + r),
+                DType::F64(r) => DType::F64(l as f64 + r),
+                DType::Object(_) => DType::F32(l),
+            },
+            DType::F64(l) => match rhs {
+                DType::None => DType::F64(l),
+                DType::U32(r) => DType::F64(l + *r as f64),
+                DType::U64(r) => DType::F64(l + *r as f64),
+                DType::F32(r) => DType::F64(l + *r as f64),
+                DType::F64(r) => DType::F64(l + r),
+                DType::Object(_) => DType::F64(l),
+            },
+            DType::Object(l) => match rhs {
+                DType::Object(r) => DType::Object(l + r),
+                _ => DType::Object(l),
+            }
+
+        }
+    }
+}
+
+impl Add<&DType> for &DType {
+    type Output = DType;
+
+    fn add(self, rhs: &DType) -> Self::Output {
+        match self {
+            // There has got to be a better way.
+            DType::None => rhs.clone(),
+            DType::U32(l) => match rhs {
+                DType::None => DType::U32(*l),
+                DType::U32(r) => DType::U32(l + r),
+                DType::U64(r) => DType::U64(*l as u64 + r),
+                DType::F32(r) => DType::F32(*l as f32 + r),
+                DType::F64(r) => DType::F64(*l as f64 + r),
+                DType::Object(_) => DType::U32(*l),
+            },
+            DType::U64(l) => match rhs {
+                DType::None => DType::U64(*l),
+                DType::U32(r) => DType::U64(l + *r as u64),
+                DType::U64(r) => DType::U64(l + r),
+                DType::F32(r) => DType::F32(*l as f32 + r),
+                DType::F64(r) => DType::F64(*l as f64 + r),
+                DType::Object(_) => DType::U64(*l),
+            },
+            DType::F32(l) => match rhs {
+                DType::None => DType::F32(*l),
+                DType::U32(r) => DType::F32(l + *r as f32),
+                DType::U64(r) => DType::F32(l + *r as f32),
+                DType::F32(r) => DType::F32(l + r),
+                DType::F64(r) => DType::F64(*l as f64 + r),
+                DType::Object(_) => DType::F32(*l),
+            },
+            DType::F64(l) => match rhs {
+                DType::None => DType::F64(*l),
+                DType::U32(r) => DType::F64(l + *r as f64),
+                DType::U64(r) => DType::F64(l + *r as f64),
+                DType::F32(r) => DType::F64(l + *r as f64),
+                DType::F64(r) => DType::F64(l + r),
+                DType::Object(_) => DType::F64(*l),
+            },
+            DType::Object(l) => match rhs {
+                DType::Object(r) => DType::Object(l.clone() + r),
+                _ => DType::Object(l.clone()),
+            }
+        }
+    }
+}
+
+impl Sub<&DType> for DType {
+    type Output = DType;
+
+    fn sub(self, rhs: &DType) -> Self::Output {
+        match self {
+            DType::None => match rhs {
+                _ => DType::None,
+            },
+            DType::U32(l) => match rhs {
+                DType::None => DType::U32(l),
+                DType::U32(r) => DType::U32(l - r),
+                DType::U64(r) => DType::U64(l as u64 - r),
+                DType::F32(r) => DType::F32(l as f32 - r),
+                DType::F64(r) => DType::F64(l as f64 - r),
+                DType::Object(_) => DType::U32(l),
+            },
+            DType::U64(l) => match rhs {
+                DType::None => DType::U64(l),
+                DType::U32(r) => DType::U64(l - *r as u64),
+                DType::U64(r) => DType::U64(l - r),
+                DType::F32(r) => DType::F32(l as f32 - r),
+                DType::F64(r) => DType::F64(l as f64 - r),
+                DType::Object(_) => DType::U64(l),
+            },
+            DType::F32(l) => match rhs {
+                DType::None => DType::F32(l),
+                DType::U32(r) => DType::F32(l - *r as f32),
+                DType::U64(r) => DType::F32(l - *r as f32),
+                DType::F32(r) => DType::F32(l - r),
+                DType::F64(r) => DType::F64(l as f64 - r),
+                DType::Object(_) => DType::F32(l),
+            },
+            DType::F64(l) => match rhs {
+                DType::None => DType::F64(l),
+                DType::U32(r) => DType::F64(l - *r as f64),
+                DType::U64(r) => DType::F64(l - *r as f64),
+                DType::F32(r) => DType::F64(l - *r as f64),
+                DType::F64(r) => DType::F64(l - r),
+                DType::Object(_) => DType::F64(l),
+            },
+            DType::Object(l) => match rhs {
+                _ => DType::Object(l),
+            }
+
+        }
+    }
+}
+
+impl Sub<&DType> for &DType {
+    type Output = DType;
+
+    fn sub(self, rhs: &DType) -> Self::Output {
+        match self {
+            DType::None => match rhs {
+                _ => DType::None,
+            },
+            DType::U32(l) => match rhs {
+                DType::None => DType::U32(*l),
+                DType::U32(r) => DType::U32(l - r),
+                DType::U64(r) => DType::U64(*l as u64 - r),
+                DType::F32(r) => DType::F32(*l as f32 - r),
+                DType::F64(r) => DType::F64(*l as f64 - r),
+                DType::Object(_) => DType::U32(*l),
+            },
+            DType::U64(l) => match rhs {
+                DType::None => DType::U64(*l),
+                DType::U32(r) => DType::U64(l - *r as u64),
+                DType::U64(r) => DType::U64(l - r),
+                DType::F32(r) => DType::F32(*l as f32 - r),
+                DType::F64(r) => DType::F64(*l as f64 - r),
+                DType::Object(_) => DType::U64(*l),
+            },
+            DType::F32(l) => match rhs {
+                DType::None => DType::F32(*l),
+                DType::U32(r) => DType::F32(l - *r as f32),
+                DType::U64(r) => DType::F32(l - *r as f32),
+                DType::F32(r) => DType::F32(l - r),
+                DType::F64(r) => DType::F64(*l as f64 - r),
+                DType::Object(_) => DType::F32(*l),
+            },
+            DType::F64(l) => match rhs {
+                DType::None => DType::F64(*l),
+                DType::U32(r) => DType::F64(l - *r as f64),
+                DType::U64(r) => DType::F64(l - *r as f64),
+                DType::F32(r) => DType::F64(l - *r as f64),
+                DType::F64(r) => DType::F64(l - r),
+                DType::Object(_) => DType::F64(*l),
+            },
+            DType::Object(l) => match rhs {
+                _ => DType::Object(l.clone()),
+            }
+
+        }
+    }
+}
+
+impl Mul<&DType> for DType {
+    type Output = DType;
+
+    fn mul(self, rhs: &DType) -> Self::Output {
+        match self {
+            // There has got to be a better way.
+            DType::None => rhs.clone(),
+            DType::U32(l) => match rhs {
+                DType::None => DType::U32(l),
+                DType::U32(r) => DType::U32(l * r),
+                DType::U64(r) => DType::U64(l as u64 * r),
+                DType::F32(r) => DType::F32(l as f32 * r),
+                DType::F64(r) => DType::F64(l as f64 * r),
+                DType::Object(_) => DType::U32(l),
+            },
+            DType::U64(l) => match rhs {
+                DType::None => DType::U64(l),
+                DType::U32(r) => DType::U64(l * *r as u64),
+                DType::U64(r) => DType::U64(l * r),
+                DType::F32(r) => DType::F32(l as f32 * r),
+                DType::F64(r) => DType::F64(l as f64 * r),
+                DType::Object(_) => DType::U64(l),
+            },
+            DType::F32(l) => match rhs {
+                DType::None => DType::F32(l),
+                DType::U32(r) => DType::F32(l * *r as f32),
+                DType::U64(r) => DType::F32(l * *r as f32),
+                DType::F32(r) => DType::F32(l * r),
+                DType::F64(r) => DType::F64(l as f64 * r),
+                DType::Object(_) => DType::F32(l),
+            },
+            DType::F64(l) => match rhs {
+                DType::None => DType::F64(l),
+                DType::U32(r) => DType::F64(l * *r as f64),
+                DType::U64(r) => DType::F64(l * *r as f64),
+                DType::F32(r) => DType::F64(l * *r as f64),
+                DType::F64(r) => DType::F64(l * r),
+                DType::Object(_) => DType::F64(l),
+            },
+            DType::Object(l) => match rhs {
+                DType::Object(r) => DType::Object(l + r),
+                _ => DType::Object(l),
+            }
+
+        }
+    }
+}
+
+impl Mul<&DType> for &DType {
+    type Output = DType;
+
+    fn mul(self, rhs: &DType) -> Self::Output {
+        match self {
+            // There has got to be a better way.
+            DType::None => rhs.clone(),
+            DType::U32(l) => match rhs {
+                DType::None => DType::U32(*l),
+                DType::U32(r) => DType::U32(l * r),
+                DType::U64(r) => DType::U64(*l as u64 * r),
+                DType::F32(r) => DType::F32(*l as f32 * r),
+                DType::F64(r) => DType::F64(*l as f64 * r),
+                DType::Object(_) => DType::U32(*l),
+            },
+            DType::U64(l) => match rhs {
+                DType::None => DType::U64(*l),
+                DType::U32(r) => DType::U64(l * *r as u64),
+                DType::U64(r) => DType::U64(l * r),
+                DType::F32(r) => DType::F32(*l as f32 * r),
+                DType::F64(r) => DType::F64(*l as f64 * r),
+                DType::Object(_) => DType::U64(*l),
+            },
+            DType::F32(l) => match rhs {
+                DType::None => DType::F32(*l),
+                DType::U32(r) => DType::F32(l * *r as f32),
+                DType::U64(r) => DType::F32(l * *r as f32),
+                DType::F32(r) => DType::F32(l * r),
+                DType::F64(r) => DType::F64(*l as f64 * r),
+                DType::Object(_) => DType::F32(*l),
+            },
+            DType::F64(l) => match rhs {
+                DType::None => DType::F64(*l),
+                DType::U32(r) => DType::F64(l * *r as f64),
+                DType::U64(r) => DType::F64(l * *r as f64),
+                DType::F32(r) => DType::F64(l * *r as f64),
+                DType::F64(r) => DType::F64(l * r),
+                DType::Object(_) => DType::F64(*l),
+            },
+            DType::Object(l) => match rhs {
+                DType::Object(r) => DType::Object(l.clone() + r),
+                _ => DType::Object(l.clone()),
+            }
+
+        }
+    }
+}
 
 #[repr(C)]
-pub(crate) struct BaseMatrix<A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>>{
-    data: Array2<A>
+pub(crate) struct BaseMatrix{
+    data: Array2<DType>
 }
 
-impl<A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> BaseMatrix<A>{
+impl BaseMatrix{
     //@Sporadic Creator you're going to have to save me on this one :(
     // pub(crate) fn from_csv(sep: &str, fname: PathBuf) -> Self{ 
     // }
@@ -54,23 +318,23 @@ impl<A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> BaseMatrix<A>{
         assert!(self.data.shape().len() == 2);
         (self.data.nrows(), self.data.ncols())
     }
-    pub(crate) fn get_col(&self, cindex: usize) -> Option<&[A]> {
+    pub(crate) fn get_col(&self, cindex: usize) -> Option<&[DType]> {
         self.data.column(cindex).to_slice()
     }
-    pub(crate) fn get_row(&self, rindex: usize) -> Option<&[A]> {
+    pub(crate) fn get_row(&self, rindex: usize) -> Option<&[DType]> {
         self.data.row(rindex).to_slice()
     }
-    pub(crate) fn get(&self, rindex: usize, cindex: usize) -> A{
-        *self.data.get((rindex, cindex)).unwrap()
+    pub(crate) fn get(&self, rindex: usize, cindex: usize) -> DType{
+        self.data.get((rindex, cindex)).unwrap().clone()
     }
 
-    pub(crate) fn cols(&self) -> ColumnIter<'_, A> {
+    pub(crate) fn cols(&self) -> ColumnIter<'_> {
         ColumnIter {
             inner: self.data.columns().into_iter()
         }
     }
 
-    pub(crate) fn rows(&self) -> RowIter<'_, A> {
+    pub(crate) fn rows(&self) -> RowIter<'_> {
         RowIter {
             inner: self.data.rows().into_iter()
         }
@@ -79,111 +343,99 @@ impl<A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> BaseMatrix<A>{
 
 //@ViableCompute, I want you to implement std::ops::traits for BaseMatrix [add, sub, mult(dot and element wise), div, index(use the get() function)]. When we're done with that we'll write a more userfriendly API that will
 //be visible for our users, similar to pandas dataframe
-impl<A: BaseType<A> + AddAssign<A> + LinalgScalar + SubAssign<A>> std::ops::AddAssign<BaseMatrix<A>> for BaseMatrix<A>
+impl std::ops::AddAssign<BaseMatrix> for BaseMatrix
 {
-    fn add_assign(&mut self, rhs: BaseMatrix<A>) {
+    fn add_assign(&mut self, rhs: BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());
         self.data += &rhs.data
     }
 }
-impl<A: BaseType<A> + AddAssign<A> + LinalgScalar + SubAssign<A>> std::ops::AddAssign<&BaseMatrix<A>> for BaseMatrix<A>
+impl std::ops::AddAssign<&BaseMatrix> for BaseMatrix
 {
-    fn add_assign(&mut self, rhs: &BaseMatrix<A>) {
+    fn add_assign(&mut self, rhs: &BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());
         self.data += &rhs.data
     }
 }
-impl<A: BaseType<A> + AddAssign<A> + LinalgScalar + SubAssign<A>> std::ops::Add<BaseMatrix<A>> for BaseMatrix<A>
+impl std::ops::Add<BaseMatrix> for BaseMatrix
 {
-    type Output = BaseMatrix<A>;
-    fn add(self, mut rhs: BaseMatrix<A>) -> Self::Output {
+    type Output = BaseMatrix;
+    fn add(self, mut rhs: BaseMatrix) -> Self::Output {
         rhs += &self;
         rhs
     }
 }
 
-impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + AddAssign<A>> std::ops::SubAssign<BaseMatrix<A>> for BaseMatrix<A>
+impl std::ops::SubAssign<BaseMatrix> for BaseMatrix
 {
-    fn sub_assign(&mut self, rhs: BaseMatrix<A>) {
+    fn sub_assign(&mut self, rhs: BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());
         self.data -= &rhs.data
     }
 }
-impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + AddAssign<A>> std::ops::SubAssign<&BaseMatrix<A>> for BaseMatrix<A>
+impl std::ops::SubAssign<&BaseMatrix> for BaseMatrix
 {
-    fn sub_assign(&mut self, rhs: &BaseMatrix<A>) {
+    fn sub_assign(&mut self, rhs: &BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());
         self.data -= &rhs.data
     }
 }
 //Subtraction is not implemented yet
 
-impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + AddAssign<A>> std::ops::Index<usize> for BaseMatrix<A>
+impl std::ops::Index<usize> for BaseMatrix
 {
-    type Output = [A];
+    type Output = [DType];
     fn index(&self, index: usize) -> &Self::Output {
         self.get_row(index).unwrap()
     }
 }
 
-//Scalar Multiplication: Undone
-impl<A, T> std::ops::MulAssign<T> for BaseMatrix<A>
-where A: BaseType<A> + SubAssign<A> + LinalgScalar + AddAssign<A> + MulAssign<A>,
-      T: LinalgScalar
-{
-    fn mul_assign(&mut self, rhs: T) {
-        
-    }
-}
-impl<A, T> std::ops::Mul<T> for BaseMatrix<A>
-where A: BaseType<A> + SubAssign<A> + LinalgScalar + AddAssign<A> + MulAssign<A>,
-      T: LinalgScalar
-{
-    type Output = BaseMatrix<A>;
-    fn mul(self, rhs: T) -> Self::Output {
-        self
-    }
-}
+// impl<T> std::ops::Mul<T> for BaseMatrix {
+//     type Output = BaseMatrix;
+//     fn mul(self, rhs: T) -> Self::Output {
+//         self
+//     }
+// }
 
-impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + MulAssign<A> + AddAssign<A>> std::ops::MulAssign<BaseMatrix<A>> for BaseMatrix<A>
+impl std::ops::MulAssign<BaseMatrix> for BaseMatrix
 {
-    fn mul_assign(&mut self, rhs: BaseMatrix<A>) {
+    fn mul_assign(&mut self, rhs: BaseMatrix) {
         self.data *= &rhs.data
     }
 }
-impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + MulAssign<A> + AddAssign<A>> std::ops::MulAssign<&BaseMatrix<A>> for BaseMatrix<A>
+impl std::ops::MulAssign<&BaseMatrix> for BaseMatrix
 {
-    fn mul_assign(&mut self, rhs: &BaseMatrix<A>) {
+    fn mul_assign(&mut self, rhs: &BaseMatrix) {
         self.data *= &rhs.data
     }
 }
-impl<A: BaseType<A> + SubAssign<A> + LinalgScalar + MulAssign<A> + AddAssign<A>> std::ops::Mul<BaseMatrix<A>> for BaseMatrix<A>
+impl std::ops::Mul<BaseMatrix> for BaseMatrix
 {
-    type Output = BaseMatrix<A>;
-    fn mul(self, rhs: BaseMatrix<A>) -> Self::Output {
+    type Output = BaseMatrix;
+    fn mul(self, rhs: BaseMatrix) -> Self::Output {
         //Uninmplemented because matrix multiplication is not commutative and i'll have to clone()
         self
     }
 }
 
-pub(crate) struct ColumnIter<'a, A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> {
-    inner: LanesIter<'a, A, Ix1>,
+pub(crate) struct ColumnIter<'a> {
+    inner: LanesIter<'a, DType, Ix1>,
 }
 
-impl<'a, A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> Iterator for ColumnIter<'a, A> {
-    type Item = ArrayBase<ViewRepr<&'a A>, Dim<[usize; 1]>>;
+impl<'a> Iterator for ColumnIter<'a> {
+    type Item = ArrayBase<ViewRepr<&'a DType>, Dim<[usize; 1]>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }
 }
 
-pub(crate) struct RowIter<'a, A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> {
-    inner: LanesIter<'a, A, Ix1>,
+pub(crate) struct RowIter<'a> {
+    inner: LanesIter<'a, DType, Ix1>,
 }
 
-impl<'a, A: BaseType<A> + LinalgScalar + AddAssign<A> + SubAssign<A>> Iterator for RowIter<'a, A> {
-    type Item = ArrayBase<ViewRepr<&'a A>, Dim<[usize; 1]>>;
+impl<'a> Iterator for RowIter<'a> {
+    type Item = ArrayBase<ViewRepr<&'a DType>, Dim<[usize; 1]>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
