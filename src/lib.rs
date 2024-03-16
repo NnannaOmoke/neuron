@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 #![allow(unused_imports)]
+
+mod base_array;
+pub mod dtype;
+
 //All imports are defined here and made (pub)crate
 pub(crate) use ndarray::{Array2, Ix2};
 pub(crate) use std::{collections::HashMap, fs::OpenOptions, io::BufReader, path::PathBuf};
@@ -14,5 +18,3 @@ pub(crate) use std::{collections::HashMap, fs::OpenOptions, io::BufReader, path:
 
 //we will use this to bench the performance of seperate 2d matrices with criterion
 //instead of pub(crate)-ing criterion, since we won't use it elsewhere we'll just import it privately
-mod base_array;
-pub mod dtype;
