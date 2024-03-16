@@ -1,4 +1,6 @@
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+use std::fmt::Display;
+
+use crate::*;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum DType {
@@ -8,6 +10,66 @@ pub enum DType {
     F32(f32),
     F64(f64),
     Object(String),
+}
+
+
+
+impl DType{
+    pub fn cast(&self, rhs: &String) -> Self{
+        match self{
+            DType::None => match rhs.to_lowercase().as_str(){
+                _ =>{
+                    eprintln!("None type is not convertible.");
+                    DType::None
+                }
+            },
+            DType::F32(value) => match rhs.to_lowercase().as_str(){
+                "none" => DType::None,
+                "u32" => DType::U32(*value as u32),
+                "u64" => DType::U64(*value as u64),
+                "f32" => DType::F32(*value as f32),
+                "f64" => DType::F64(*value as f64),
+                "string" => DType::Object(value.to_string()),
+                _ => panic!("Invalid datatype variant given")
+            },
+            DType::F64(value) => match rhs.to_lowercase().as_str(){
+                "none" => DType::None,
+                "u32" => DType::U32(*value as u32),
+                "u64" => DType::U64(*value as u64),
+                "f32" => DType::F32(*value as f32),
+                "f64" => DType::F64(*value as f64),
+                "string" => DType::Object(value.to_string()),
+                _ => panic!("Invalid datatype variant given")
+            },
+            DType::U32(value) => match rhs.to_lowercase().as_str(){
+                "none" => DType::None,
+                "u32" => DType::U32(*value as u32),
+                "u64" => DType::U64(*value as u64),
+                "f32" => DType::F32(*value as f32),
+                "f64" => DType::F64(*value as f64),
+                "string" => DType::Object(value.to_string()),
+                _ => panic!("Invalid datatype variant given")
+            },
+            DType::U64(value) => match rhs.to_lowercase().as_str(){
+                "none" => DType::None,
+                "u32" => DType::U32(*value as u32),
+                "u64" => DType::U64(*value as u64),
+                "f32" => DType::F32(*value as f32),
+                "f64" => DType::F64(*value as f64),
+                "string" => DType::Object(value.to_string()),
+                _ => panic!("Invalid datatype variant given")
+            },
+            DType::Object(value) => match rhs.to_lowercase().as_str(){
+                "none" => DType::None,
+                "u32" => DType::U32(str::parse::<u32>(&value).expect("Parse failed!")),
+                "u64" => DType::U64(str::parse::<u64>(&value).expect("Parse failed!")),
+                "f32" => DType::F32(str::parse::<f32>(&value).expect("Parse failed!")),
+                "f64" => DType::F64(str::parse::<f64>(&value).expect("Parse failed!")),
+                "string" => DType::Object(value.to_string()),
+                _ => panic!("Invalid datatype variant given")
+            },   
+        }
+    }
 }
 
 impl Add<&DType> for DType {
@@ -483,6 +545,19 @@ impl DivAssign<&DType> for DType {
         match self {
             Object(_) => { /* no change */ }
             _ => *self = &*self / rhs,
+        }
+    }
+}
+
+impl Display for DType{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+            DType::None => write!(f, "NAN"),
+            DType::F32(_) => write!(f, "f32"),
+            DType::F64(_) => write!(f, "f64"),
+            DType::U32(_) => write!(f, "u32"),
+            DType::U64(_) => write!(f, "u64"),
+            DType::Object(_) => write!(f, "object"),
         }
     }
 }

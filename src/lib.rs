@@ -11,7 +11,7 @@ pub(crate) use std::{
     path::PathBuf,
     io::BufReader,
     collections::HashMap,
-    ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign, Index},
+    ops::{Add, AddAssign, Div, DivAssign, IndexMut, Mul, MulAssign, Sub, SubAssign, Index},
 };
 pub(crate) use core::num;
 pub(crate) use ndarray::{
