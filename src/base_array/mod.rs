@@ -1,10 +1,4 @@
-use core::num;
-use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
-
-use ndarray::{
-    iter::LanesIter, Array2, ArrayBase, ArrayView, Axis, Dim, Ix1, Ix2, LinalgScalar, ViewRepr,
-};
-
+use crate::*;
 use crate::dtype::DType;
 
 #[repr(C)]
@@ -50,12 +44,6 @@ impl BaseMatrix {
 
 //@ViableCompute, I want you to implement std::ops::traits for BaseMatrix [add, sub, mult(dot and element wise), div, index(use the get() function)]. When we're done with that we'll write a more userfriendly API that will
 //be visible for our users, similar to pandas dataframe
-impl std::ops::AddAssign<BaseMatrix> for BaseMatrix {
-    fn add_assign(&mut self, rhs: BaseMatrix) {
-        assert_eq!(self.shape(), rhs.shape());
-        self.data. += &rhs.data
-    }
-}
 impl AddAssign<&BaseMatrix> for BaseMatrix
 {
     fn add_assign(&mut self, rhs: &BaseMatrix) {
@@ -109,7 +97,7 @@ impl MulAssign<BaseMatrix> for BaseMatrix
         self.data *= &rhs.data
     }
 }
-impl std::ops::MulAssign<&BaseMatrix> for BaseMatrix {
+
 impl MulAssign<&BaseMatrix> for BaseMatrix
 {
     fn mul_assign(&mut self, rhs: &BaseMatrix) {
@@ -206,3 +194,4 @@ impl <'a> BaseDataset<'a>{
         types
     }
 }
+
