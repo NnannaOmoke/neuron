@@ -1,315 +1,27 @@
-use crate::*;
+use core::num;
+use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub enum DType {
-    None,
-    U32(u32),
-    U64(u64),
-    F32(f32),
-    F64(f64),
-    Object(String),
-}
+use ndarray::{
+    iter::LanesIter, Array2, ArrayBase, ArrayView, Axis, Dim, Ix1, Ix2, LinalgScalar, ViewRepr,
+};
 
-impl Add<&DType> for DType {
-    type Output = DType;
-
-    fn add(self, rhs: &DType) -> Self::Output {
-        match self {
-            // There has got to be a better way.
-            DType::None => rhs.clone(),
-            DType::U32(l) => match rhs {
-                DType::None => DType::U32(l),
-                DType::U32(r) => DType::U32(l + r),
-                DType::U64(r) => DType::U64(l as u64 + r),
-                DType::F32(r) => DType::F32(l as f32 + r),
-                DType::F64(r) => DType::F64(l as f64 + r),
-                DType::Object(_) => DType::U32(l),
-            },
-            DType::U64(l) => match rhs {
-                DType::None => DType::U64(l),
-                DType::U32(r) => DType::U64(l + *r as u64),
-                DType::U64(r) => DType::U64(l + r),
-                DType::F32(r) => DType::F32(l as f32 + r),
-                DType::F64(r) => DType::F64(l as f64 + r),
-                DType::Object(_) => DType::U64(l),
-            },
-            DType::F32(l) => match rhs {
-                DType::None => DType::F32(l),
-                DType::U32(r) => DType::F32(l + *r as f32),
-                DType::U64(r) => DType::F32(l + *r as f32),
-                DType::F32(r) => DType::F32(l + r),
-                DType::F64(r) => DType::F64(l as f64 + r),
-                DType::Object(_) => DType::F32(l),
-            },
-            DType::F64(l) => match rhs {
-                DType::None => DType::F64(l),
-                DType::U32(r) => DType::F64(l + *r as f64),
-                DType::U64(r) => DType::F64(l + *r as f64),
-                DType::F32(r) => DType::F64(l + *r as f64),
-                DType::F64(r) => DType::F64(l + r),
-                DType::Object(_) => DType::F64(l),
-            },
-            DType::Object(l) => match rhs {
-                DType::Object(r) => DType::Object(l + r),
-                _ => DType::Object(l),
-            }
-
-        }
-    }
-}
-
-impl Add<&DType> for &DType {
-    type Output = DType;
-
-    fn add(self, rhs: &DType) -> Self::Output {
-        match self {
-            // There has got to be a better way.
-            DType::None => rhs.clone(),
-            DType::U32(l) => match rhs {
-                DType::None => DType::U32(*l),
-                DType::U32(r) => DType::U32(l + r),
-                DType::U64(r) => DType::U64(*l as u64 + r),
-                DType::F32(r) => DType::F32(*l as f32 + r),
-                DType::F64(r) => DType::F64(*l as f64 + r),
-                DType::Object(_) => DType::U32(*l),
-            },
-            DType::U64(l) => match rhs {
-                DType::None => DType::U64(*l),
-                DType::U32(r) => DType::U64(l + *r as u64),
-                DType::U64(r) => DType::U64(l + r),
-                DType::F32(r) => DType::F32(*l as f32 + r),
-                DType::F64(r) => DType::F64(*l as f64 + r),
-                DType::Object(_) => DType::U64(*l),
-            },
-            DType::F32(l) => match rhs {
-                DType::None => DType::F32(*l),
-                DType::U32(r) => DType::F32(l + *r as f32),
-                DType::U64(r) => DType::F32(l + *r as f32),
-                DType::F32(r) => DType::F32(l + r),
-                DType::F64(r) => DType::F64(*l as f64 + r),
-                DType::Object(_) => DType::F32(*l),
-            },
-            DType::F64(l) => match rhs {
-                DType::None => DType::F64(*l),
-                DType::U32(r) => DType::F64(l + *r as f64),
-                DType::U64(r) => DType::F64(l + *r as f64),
-                DType::F32(r) => DType::F64(l + *r as f64),
-                DType::F64(r) => DType::F64(l + r),
-                DType::Object(_) => DType::F64(*l),
-            },
-            DType::Object(l) => match rhs {
-                DType::Object(r) => DType::Object(l.clone() + r),
-                _ => DType::Object(l.clone()),
-            }
-        }
-    }
-}
-
-impl Sub<&DType> for DType {
-    type Output = DType;
-
-    fn sub(self, rhs: &DType) -> Self::Output {
-        match self {
-            DType::None => match rhs {
-                _ => DType::None,
-            },
-            DType::U32(l) => match rhs {
-                DType::None => DType::U32(l),
-                DType::U32(r) => DType::U32(l - r),
-                DType::U64(r) => DType::U64(l as u64 - r),
-                DType::F32(r) => DType::F32(l as f32 - r),
-                DType::F64(r) => DType::F64(l as f64 - r),
-                DType::Object(_) => DType::U32(l),
-            },
-            DType::U64(l) => match rhs {
-                DType::None => DType::U64(l),
-                DType::U32(r) => DType::U64(l - *r as u64),
-                DType::U64(r) => DType::U64(l - r),
-                DType::F32(r) => DType::F32(l as f32 - r),
-                DType::F64(r) => DType::F64(l as f64 - r),
-                DType::Object(_) => DType::U64(l),
-            },
-            DType::F32(l) => match rhs {
-                DType::None => DType::F32(l),
-                DType::U32(r) => DType::F32(l - *r as f32),
-                DType::U64(r) => DType::F32(l - *r as f32),
-                DType::F32(r) => DType::F32(l - r),
-                DType::F64(r) => DType::F64(l as f64 - r),
-                DType::Object(_) => DType::F32(l),
-            },
-            DType::F64(l) => match rhs {
-                DType::None => DType::F64(l),
-                DType::U32(r) => DType::F64(l - *r as f64),
-                DType::U64(r) => DType::F64(l - *r as f64),
-                DType::F32(r) => DType::F64(l - *r as f64),
-                DType::F64(r) => DType::F64(l - r),
-                DType::Object(_) => DType::F64(l),
-            },
-            DType::Object(l) => match rhs {
-                _ => DType::Object(l),
-            }
-
-        }
-    }
-}
-
-impl Sub<&DType> for &DType {
-    type Output = DType;
-
-    fn sub(self, rhs: &DType) -> Self::Output {
-        match self {
-            DType::None => match rhs {
-                _ => DType::None,
-            },
-            DType::U32(l) => match rhs {
-                DType::None => DType::U32(*l),
-                DType::U32(r) => DType::U32(l - r),
-                DType::U64(r) => DType::U64(*l as u64 - r),
-                DType::F32(r) => DType::F32(*l as f32 - r),
-                DType::F64(r) => DType::F64(*l as f64 - r),
-                DType::Object(_) => DType::U32(*l),
-            },
-            DType::U64(l) => match rhs {
-                DType::None => DType::U64(*l),
-                DType::U32(r) => DType::U64(l - *r as u64),
-                DType::U64(r) => DType::U64(l - r),
-                DType::F32(r) => DType::F32(*l as f32 - r),
-                DType::F64(r) => DType::F64(*l as f64 - r),
-                DType::Object(_) => DType::U64(*l),
-            },
-            DType::F32(l) => match rhs {
-                DType::None => DType::F32(*l),
-                DType::U32(r) => DType::F32(l - *r as f32),
-                DType::U64(r) => DType::F32(l - *r as f32),
-                DType::F32(r) => DType::F32(l - r),
-                DType::F64(r) => DType::F64(*l as f64 - r),
-                DType::Object(_) => DType::F32(*l),
-            },
-            DType::F64(l) => match rhs {
-                DType::None => DType::F64(*l),
-                DType::U32(r) => DType::F64(l - *r as f64),
-                DType::U64(r) => DType::F64(l - *r as f64),
-                DType::F32(r) => DType::F64(l - *r as f64),
-                DType::F64(r) => DType::F64(l - r),
-                DType::Object(_) => DType::F64(*l),
-            },
-            DType::Object(l) => match rhs {
-                _ => DType::Object(l.clone()),
-            }
-
-        }
-    }
-}
-
-impl Mul<&DType> for DType {
-    type Output = DType;
-
-    fn mul(self, rhs: &DType) -> Self::Output {
-        match self {
-            // There has got to be a better way.
-            DType::None => rhs.clone(),
-            DType::U32(l) => match rhs {
-                DType::None => DType::U32(l),
-                DType::U32(r) => DType::U32(l * r),
-                DType::U64(r) => DType::U64(l as u64 * r),
-                DType::F32(r) => DType::F32(l as f32 * r),
-                DType::F64(r) => DType::F64(l as f64 * r),
-                DType::Object(_) => DType::U32(l),
-            },
-            DType::U64(l) => match rhs {
-                DType::None => DType::U64(l),
-                DType::U32(r) => DType::U64(l * *r as u64),
-                DType::U64(r) => DType::U64(l * r),
-                DType::F32(r) => DType::F32(l as f32 * r),
-                DType::F64(r) => DType::F64(l as f64 * r),
-                DType::Object(_) => DType::U64(l),
-            },
-            DType::F32(l) => match rhs {
-                DType::None => DType::F32(l),
-                DType::U32(r) => DType::F32(l * *r as f32),
-                DType::U64(r) => DType::F32(l * *r as f32),
-                DType::F32(r) => DType::F32(l * r),
-                DType::F64(r) => DType::F64(l as f64 * r),
-                DType::Object(_) => DType::F32(l),
-            },
-            DType::F64(l) => match rhs {
-                DType::None => DType::F64(l),
-                DType::U32(r) => DType::F64(l * *r as f64),
-                DType::U64(r) => DType::F64(l * *r as f64),
-                DType::F32(r) => DType::F64(l * *r as f64),
-                DType::F64(r) => DType::F64(l * r),
-                DType::Object(_) => DType::F64(l),
-            },
-            DType::Object(l) => match rhs {
-                DType::Object(r) => DType::Object(l + r),
-                _ => DType::Object(l),
-            }
-
-        }
-    }
-}
-
-impl Mul<&DType> for &DType {
-    type Output = DType;
-
-    fn mul(self, rhs: &DType) -> Self::Output {
-        match self {
-            // There has got to be a better way.
-            DType::None => rhs.clone(),
-            DType::U32(l) => match rhs {
-                DType::None => DType::U32(*l),
-                DType::U32(r) => DType::U32(l * r),
-                DType::U64(r) => DType::U64(*l as u64 * r),
-                DType::F32(r) => DType::F32(*l as f32 * r),
-                DType::F64(r) => DType::F64(*l as f64 * r),
-                DType::Object(_) => DType::U32(*l),
-            },
-            DType::U64(l) => match rhs {
-                DType::None => DType::U64(*l),
-                DType::U32(r) => DType::U64(l * *r as u64),
-                DType::U64(r) => DType::U64(l * r),
-                DType::F32(r) => DType::F32(*l as f32 * r),
-                DType::F64(r) => DType::F64(*l as f64 * r),
-                DType::Object(_) => DType::U64(*l),
-            },
-            DType::F32(l) => match rhs {
-                DType::None => DType::F32(*l),
-                DType::U32(r) => DType::F32(l * *r as f32),
-                DType::U64(r) => DType::F32(l * *r as f32),
-                DType::F32(r) => DType::F32(l * r),
-                DType::F64(r) => DType::F64(*l as f64 * r),
-                DType::Object(_) => DType::F32(*l),
-            },
-            DType::F64(l) => match rhs {
-                DType::None => DType::F64(*l),
-                DType::U32(r) => DType::F64(l * *r as f64),
-                DType::U64(r) => DType::F64(l * *r as f64),
-                DType::F32(r) => DType::F64(l * *r as f64),
-                DType::F64(r) => DType::F64(l * r),
-                DType::Object(_) => DType::F64(*l),
-            },
-            DType::Object(l) => match rhs {
-                DType::Object(r) => DType::Object(l.clone() + r),
-                _ => DType::Object(l.clone()),
-            }
-
-        }
-    }
-}
+use crate::dtype::DType;
 
 #[repr(C)]
-pub(crate) struct BaseMatrix{
-    data: Array2<DType>
+pub(crate) struct BaseMatrix {
+    data: Array2<DType>,
 }
 
-impl BaseMatrix{
+impl BaseMatrix {
     //@Sporadic Creator you're going to have to save me on this one :(
-    // pub(crate) fn from_csv(sep: &str, fname: PathBuf) -> Self{ 
+    // pub(crate) fn from_csv(sep: &str, fname: PathBuf) -> Self{
     // }
-    pub(crate) fn transpose(self) -> Self{
-        BaseMatrix{data: self.data.reversed_axes()}
+    pub(crate) fn transpose(self) -> Self {
+        BaseMatrix {
+            data: self.data.reversed_axes(),
+        }
     }
-    pub(crate) fn shape(&self) -> (usize, usize){
+    pub(crate) fn shape(&self) -> (usize, usize) {
         assert!(self.data.shape().len() == 2);
         (self.data.nrows(), self.data.ncols())
     }
@@ -319,27 +31,26 @@ impl BaseMatrix{
     pub(crate) fn get_row(&self, rindex: usize) -> Option<&[DType]> {
         self.data.row(rindex).to_slice()
     }
-    pub(crate) fn get(&self, rindex: usize, cindex: usize) -> DType{
+    pub(crate) fn get(&self, rindex: usize, cindex: usize) -> DType {
         self.data.get((rindex, cindex)).unwrap().clone()
     }
 
     pub(crate) fn cols(&self) -> ColumnIter<'_> {
         ColumnIter {
-            inner: self.data.columns().into_iter()
+            inner: self.data.columns().into_iter(),
         }
     }
 
     pub(crate) fn rows(&self) -> RowIter<'_> {
         RowIter {
-            inner: self.data.rows().into_iter()
+            inner: self.data.rows().into_iter(),
         }
     }
 }
 
 //@ViableCompute, I want you to implement std::ops::traits for BaseMatrix [add, sub, mult(dot and element wise), div, index(use the get() function)]. When we're done with that we'll write a more userfriendly API that will
 //be visible for our users, similar to pandas dataframe
-impl std::ops::AddAssign<BaseMatrix> for BaseMatrix
-{
+impl std::ops::AddAssign<BaseMatrix> for BaseMatrix {
     fn add_assign(&mut self, rhs: BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());
         self.data. += &rhs.data
@@ -398,6 +109,7 @@ impl MulAssign<BaseMatrix> for BaseMatrix
         self.data *= &rhs.data
     }
 }
+impl std::ops::MulAssign<&BaseMatrix> for BaseMatrix {
 impl MulAssign<&BaseMatrix> for BaseMatrix
 {
     fn mul_assign(&mut self, rhs: &BaseMatrix) {
