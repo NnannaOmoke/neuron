@@ -21,6 +21,7 @@ use nalgebra;
 
 //we will use this to bench the performance of seperate 2d matrices with criterion
 //instead of pub(crate)-ing criterion, since we won't use it elsewhere we'll just import it privately
+pub mod dtype;
 mod base_array;
 
 
