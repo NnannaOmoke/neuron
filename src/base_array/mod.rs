@@ -1,8 +1,3 @@
-use core::num;
-use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
-
-use ndarray::{iter::LanesIter, ArrayBase, ArrayView, Axis, Dim, LinalgScalar, Ix1, Ix2, ViewRepr};
-
 use crate::*;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
@@ -347,17 +342,17 @@ impl std::ops::AddAssign<BaseMatrix> for BaseMatrix
 {
     fn add_assign(&mut self, rhs: BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());
-        self.data += &rhs.data
+        self.data. += &rhs.data
     }
 }
-impl std::ops::AddAssign<&BaseMatrix> for BaseMatrix
+impl AddAssign<&BaseMatrix> for BaseMatrix
 {
     fn add_assign(&mut self, rhs: &BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());
         self.data += &rhs.data
     }
 }
-impl std::ops::Add<BaseMatrix> for BaseMatrix
+impl Add<BaseMatrix> for BaseMatrix
 {
     type Output = BaseMatrix;
     fn add(self, mut rhs: BaseMatrix) -> Self::Output {
@@ -366,14 +361,14 @@ impl std::ops::Add<BaseMatrix> for BaseMatrix
     }
 }
 
-impl std::ops::SubAssign<BaseMatrix> for BaseMatrix
+impl SubAssign<BaseMatrix> for BaseMatrix
 {
     fn sub_assign(&mut self, rhs: BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());
         self.data -= &rhs.data
     }
 }
-impl std::ops::SubAssign<&BaseMatrix> for BaseMatrix
+impl SubAssign<&BaseMatrix> for BaseMatrix
 {
     fn sub_assign(&mut self, rhs: &BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());
@@ -382,7 +377,7 @@ impl std::ops::SubAssign<&BaseMatrix> for BaseMatrix
 }
 //Subtraction is not implemented yet
 
-impl std::ops::Index<usize> for BaseMatrix
+impl Index<usize> for BaseMatrix
 {
     type Output = [DType];
     fn index(&self, index: usize) -> &Self::Output {
@@ -397,19 +392,19 @@ impl std::ops::Index<usize> for BaseMatrix
 //     }
 // }
 
-impl std::ops::MulAssign<BaseMatrix> for BaseMatrix
+impl MulAssign<BaseMatrix> for BaseMatrix
 {
     fn mul_assign(&mut self, rhs: BaseMatrix) {
         self.data *= &rhs.data
     }
 }
-impl std::ops::MulAssign<&BaseMatrix> for BaseMatrix
+impl MulAssign<&BaseMatrix> for BaseMatrix
 {
     fn mul_assign(&mut self, rhs: &BaseMatrix) {
         self.data *= &rhs.data
     }
 }
-impl std::ops::Mul<BaseMatrix> for BaseMatrix
+impl Mul<BaseMatrix> for BaseMatrix
 {
     type Output = BaseMatrix;
     fn mul(self, rhs: BaseMatrix) -> Self::Output {
@@ -439,5 +434,63 @@ impl<'a> Iterator for RowIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
+    }
+}
+
+//this will be the dataset visible to the external users
+//we'll implement quite the number of methods for this, hopefully
+#[repr(C)]
+pub(crate) struct BaseDataset <'a>{
+    data: BaseMatrix,
+    column_names: Option<&'a [String]>,
+    std: Option<&'a [DType]>,
+    mean: Option<&'a [DType]>,
+    mode: Option<&'a [DType]>,
+    median: Option<&'a [DType]>,
+    percentiles: Option<&'a [&'a [DType]]>, //we should put in a vec?
+}
+
+impl <'a> BaseDataset<'a>{
+    pub fn from_matrix(data: BaseMatrix, compute_on_creation: bool, colnames: Option<&'a [String]>) -> Self{
+        if compute_on_creation{
+            todo!()
+        }
+        Self{
+            data,
+            column_names: colnames,
+            std: None,
+            mean: None,
+            mode: None,
+            median: None,
+            percentiles: None,
+        }
+    }
+    //we'll have to define a lot more convenience methods for instantiating this, however
+
+    //returns the colum names of the basedataset
+    pub fn columns(&self) -> &'a [String]{
+        match self.column_names{
+            Some(names) => names,
+            None => &[],
+        }
+    }
+    //this can get a little tricky, but basically we're assuming this
+    //every single column has a unique datatype
+    //and those without a mathematical type will be Objects, which are strings
+    //so we have to make sure that on creation of BaseMatrix and BaseDataset from csv files or elsewhere
+    //that each column contains elements all of which have a unique datatype
+    //if possible, we can cast them lazily...
+    //based on this, iterate through the first row and get all the types of the data there
+    pub fn dtypes(&self) -> Vec<DType>{
+        let types: Vec<DType> = Vec::new();
+        //iterate through the first column
+        //thanks to sporadic creator for wrapping in options. This could have been very tricky otherwise
+        let row_one = self.data.get_row(0);
+        match row_one{
+            // how do we 
+            Some(row) => {},
+            None => return Vec::new()
+        }   
+        types
     }
 }

@@ -7,9 +7,22 @@ pub(crate) use std::{
     path::PathBuf,
     io::BufReader,
     collections::HashMap,
+    ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign, Index},
 };
-pub(crate) use ndarray::{Array2, Ix2};
-use nalgebra;
+pub(crate) use core::num;
+pub(crate) use ndarray::{
+    Array2, 
+    Ix2, 
+    iter::LanesIter, 
+    ArrayBase, 
+    ArrayView, 
+    Axis, 
+    Dim, 
+    LinalgScalar, 
+    Ix1, 
+    ViewRepr
+};
+
 
 // fn test_something(){
 //     let arr = nalgebra::DMatrix::repeat(100, 100, 4f32);
