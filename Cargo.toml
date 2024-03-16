@@ -7,11 +7,7 @@ edition = "2021"
 
 [dependencies]
 micromath = "2.1.0"
-nalgebra = "0.32.4"
 ndarray = {version = "0.15.6", features = ["std", "serde", "rayon"]}
 
 [dev-dependencies]
 criterion = "0.3"
-
-
-

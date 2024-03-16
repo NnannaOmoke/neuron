@@ -2,7 +2,6 @@
 #![allow(non_camel_case_types)]
 #![allow(unused_imports)]
 //All imports are defined here and made (pub)crate
-use nalgebra;
 pub(crate) use ndarray::{Array2, Ix2};
 pub(crate) use std::{collections::HashMap, fs::OpenOptions, io::BufReader, path::PathBuf};
 
