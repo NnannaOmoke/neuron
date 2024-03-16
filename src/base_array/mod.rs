@@ -1,7 +1,6 @@
 use std::error::Error;
 
-use crate::{*, dtype::DType};
-
+use crate::{dtype::DType, *};
 
 #[repr(C)]
 #[derive(Clone)]
@@ -25,13 +24,13 @@ impl BaseMatrix {
     pub(crate) fn get_col(&self, cindex: usize) -> Option<&[DType]> {
         self.data.column(cindex).to_slice()
     }
-    pub(crate) fn get_mut_col(&mut self, cindex: usize) -> Option<&mut [DType]>{
+    pub(crate) fn get_mut_col(&mut self, cindex: usize) -> Option<&mut [DType]> {
         self.data.column_mut(cindex).into_slice()
     }
     pub(crate) fn get_row(&self, rindex: usize) -> Option<&[DType]> {
         self.data.row(rindex).to_slice()
     }
-    pub(crate) fn get_mut_row(&mut self, rindex: usize) -> Option<&mut [DType]>{
+    pub(crate) fn get_mut_row(&mut self, rindex: usize) -> Option<&mut [DType]> {
         self.data.row_mut(rindex).into_slice()
     }
     pub(crate) fn get(&self, rindex: usize, cindex: usize) -> DType {
@@ -53,15 +52,13 @@ impl BaseMatrix {
 
 //@ViableCompute, I want you to implement std::ops::traits for BaseMatrix [add, sub, mult(dot and element wise), div, index(use the get() function)]. When we're done with that we'll write a more userfriendly API that will
 //be visible for our users, similar to pandas dataframe
-impl AddAssign<&BaseMatrix> for BaseMatrix
-{
+impl AddAssign<&BaseMatrix> for BaseMatrix {
     fn add_assign(&mut self, rhs: &BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());
         self.data += &rhs.data
     }
 }
-impl Add<BaseMatrix> for BaseMatrix
-{
+impl Add<BaseMatrix> for BaseMatrix {
     type Output = BaseMatrix;
     fn add(self, mut rhs: BaseMatrix) -> Self::Output {
         rhs += &self;
@@ -69,15 +66,13 @@ impl Add<BaseMatrix> for BaseMatrix
     }
 }
 
-impl SubAssign<BaseMatrix> for BaseMatrix
-{
+impl SubAssign<BaseMatrix> for BaseMatrix {
     fn sub_assign(&mut self, rhs: BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());
         self.data -= &rhs.data
     }
 }
-impl SubAssign<&BaseMatrix> for BaseMatrix
-{
+impl SubAssign<&BaseMatrix> for BaseMatrix {
     fn sub_assign(&mut self, rhs: &BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());
         self.data -= &rhs.data
@@ -85,8 +80,7 @@ impl SubAssign<&BaseMatrix> for BaseMatrix
 }
 //Subtraction is not implemented yet
 
-impl Index<usize> for BaseMatrix
-{
+impl Index<usize> for BaseMatrix {
     type Output = [DType];
     fn index(&self, index: usize) -> &Self::Output {
         self.get_row(index).unwrap()
@@ -100,21 +94,18 @@ impl Index<usize> for BaseMatrix
 //     }
 // }
 
-impl MulAssign<BaseMatrix> for BaseMatrix
-{
+impl MulAssign<BaseMatrix> for BaseMatrix {
     fn mul_assign(&mut self, rhs: BaseMatrix) {
         self.data *= &rhs.data
     }
 }
 
-impl MulAssign<&BaseMatrix> for BaseMatrix
-{
+impl MulAssign<&BaseMatrix> for BaseMatrix {
     fn mul_assign(&mut self, rhs: &BaseMatrix) {
         self.data *= &rhs.data
     }
 }
-impl Mul<BaseMatrix> for BaseMatrix
-{
+impl Mul<BaseMatrix> for BaseMatrix {
     type Output = BaseMatrix;
     fn mul(self, _rhs: BaseMatrix) -> Self::Output {
         //Uninmplemented because matrix multiplication is not commutative and i'll have to clone()
@@ -150,7 +141,7 @@ impl<'a> Iterator for RowIter<'a> {
 //we'll implement quite the number of methods for this, hopefully
 #[repr(C)]
 #[derive(Clone)]
-pub(crate) struct BaseDataset <'a>{
+pub(crate) struct BaseDataset<'a> {
     data: BaseMatrix,
     column_names: Option<&'a [String]>,
     std: Option<&'a [DType]>,
@@ -160,12 +151,16 @@ pub(crate) struct BaseDataset <'a>{
     percentiles: Option<&'a [&'a [DType]]>, //we should put in a vec?
 }
 
-impl <'a> BaseDataset<'a>{
-    pub fn from_matrix(data: BaseMatrix, compute_on_creation: bool, colnames: Option<&'a [String]>) -> Self{
-        if compute_on_creation{
+impl<'a> BaseDataset<'a> {
+    pub fn from_matrix(
+        data: BaseMatrix,
+        compute_on_creation: bool,
+        colnames: Option<&'a [String]>,
+    ) -> Self {
+        if compute_on_creation {
             todo!()
         }
-        Self{
+        Self {
             data,
             column_names: colnames,
             std: None,
@@ -178,8 +173,8 @@ impl <'a> BaseDataset<'a>{
     //we'll have to define a lot more convenience methods for instantiating this, however
 
     //returns the colum names of the basedataset
-    pub fn columns(&self) -> &'a [String]{
-        match self.column_names{
+    pub fn columns(&self) -> &'a [String] {
+        match self.column_names {
             Some(names) => names,
             None => &[],
         }
@@ -191,23 +186,23 @@ impl <'a> BaseDataset<'a>{
     //that each column contains elements all of which have a unique datatype
     //if possible, we can cast them lazily...
     //based on this, iterate through the first row and get all the types of the data there
-    pub fn dtypes(&self){
+    pub fn dtypes(&self) {
         //iterate through the first column
         //thanks to sporadic creator for wrapping in options. This could have been very tricky otherwise
         let row_one = self.data.get_row(0);
-        match row_one{
-            // how do we 
+        match row_one {
+            // how do we
             Some(row) => {
                 //basically print the variants of the enum out
                 println!("{:?}", row)
-            },
-            None => println!("[]")
-        }  
+            }
+            None => println!("[]"),
+        }
     }
     //this will, based on the selection given, return parts of the dataset that have cols that are...
     //of the dtype
     //it will return a read only reference to the current matrix, with maybe a few cols missing?
-    pub fn select_dtypes(&self, include: &[DType], exlude: Option<&[DType]>) -> &'a Self{
+    pub fn select_dtypes(&self, include: &[DType], exlude: Option<&[DType]>) -> &'a Self {
         todo!()
     }
     //returns the number of dimensions of the dataset
@@ -215,78 +210,74 @@ impl <'a> BaseDataset<'a>{
         2
     }
     //returns the number of elements in this dataset
-    pub fn size(&self) -> usize{
+    pub fn size(&self) -> usize {
         self.data.data.nrows() * self.data.data.ncols()
     }
     //returns the dimensions of this basedataset
-    pub fn shape(&self) -> (usize, usize){
+    pub fn shape(&self) -> (usize, usize) {
         self.data.shape()
     }
     //cast all elements in a column to that of another dtype
-    pub fn astype(&mut self, colname: Option<String>, dtype: String){
-        match colname{
+    pub fn astype(&mut self, colname: Option<String>, dtype: String) {
+        match colname {
             Some(name) => {
-                for elem in &mut self[name]{
+                for elem in &mut self[name] {
                     *elem = elem.cast(&dtype);
                 }
-            },
+            }
             None => {}
         }
-    } 
+    }
     //why would you do this :(
-    pub fn deepcopy(&self) -> Self{
+    pub fn deepcopy(&self) -> Self {
         self.clone()
     }
-    
-
-
 }
 
-
-impl<'a> Index<String> for BaseDataset<'a>{
+impl<'a> Index<String> for BaseDataset<'a> {
     type Output = [DType];
     fn index(&self, index: String) -> &Self::Output {
-        match self.column_names{
+        match self.column_names {
             Some(names) => {
                 let index = names.binary_search(&index).expect("Invalid column name");
                 self.data.get_row(index).expect("This shouldn't be broken")
-            },
-            None => panic!("Column names have not been provided!")
+            }
+            None => panic!("Column names have not been provided!"),
         }
     }
 }
 
-impl<'a> Index<usize> for BaseDataset<'a>{
+impl<'a> Index<usize> for BaseDataset<'a> {
     type Output = [DType];
     fn index(&self, index: usize) -> &Self::Output {
         //this should return a row, no?
-        match self.data.get_row(index){
+        match self.data.get_row(index) {
             Some(slice) => slice,
-            None => panic!("Invalid index")
+            None => panic!("Invalid index"),
         }
     }
 }
 
-impl<'a> IndexMut<String> for BaseDataset<'a>{
+impl<'a> IndexMut<String> for BaseDataset<'a> {
     fn index_mut(&mut self, index: String) -> &mut Self::Output {
-        match self.column_names{
+        match self.column_names {
             Some(names) => {
                 let index = names.binary_search(&index).expect("Invalid column name");
-                self.data.get_mut_col(index).expect("This shouldn't be broken")
-            },
-            None => panic!("Column names have not been provided!")
+                self.data
+                    .get_mut_col(index)
+                    .expect("This shouldn't be broken")
+            }
+            None => panic!("Column names have not been provided!"),
         }
     }
 }
 
-impl<'a> IndexMut<usize> for BaseDataset<'a>{
+impl<'a> IndexMut<usize> for BaseDataset<'a> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         //this should return a row, no?
-        match self.data.get_mut_row(index){
+        match self.data.get_mut_row(index) {
             Some(slice) => slice,
-            None => panic!("Invalid index")
+            None => panic!("Invalid index"),
         }
     }
 }
-
-
