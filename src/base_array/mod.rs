@@ -199,7 +199,11 @@ impl <'a> BaseDataset<'a>{
             // how do we 
             Some(row) => {
                 //basically print the variants of the enum out
-                println!("{:?}", row)
+                print!("[");
+                for elem in row{
+                    print!("{}, ", elem.display_type())
+                }
+                print!("]");
             },
             None => println!("[]")
         }  
@@ -234,11 +238,13 @@ impl <'a> BaseDataset<'a>{
         }
     } 
     //why would you do this :(
-    pub fn deepcopy(&self) -> Self{
+    pub fn deepcopy(&self,) -> Self{
         self.clone()
     }
-    
+    //returns the first n rows in the dataframe (usually this should be printed out as a table)
+    pub fn head(n: usize) -> (){
 
+    }
 
 }
 

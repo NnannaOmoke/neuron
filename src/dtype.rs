@@ -70,6 +70,19 @@ impl DType{
             },   
         }
     }
+
+    pub fn display_type(&self) -> String{
+        let mut string = String::new();
+        match self{
+            DType::None => string.push_str("None"),
+            DType::F32(_) => string.push_str("f32"),
+            DType::F64(_) => string.push_str("f64"),
+            DType::U32(_) => string.push_str("u32"),
+            DType::U64(_) => string.push_str("u64"),
+            DType::Object(_) => string.push_str("object"),
+        }
+        string
+    }
 }
 
 impl Add<&DType> for DType {
@@ -552,12 +565,14 @@ impl DivAssign<&DType> for DType {
 impl Display for DType{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self{
+            //maybe i was a little too hasty with this...
+            //ugh i'll have to manually do this there, then
             DType::None => write!(f, "NAN"),
-            DType::F32(_) => write!(f, "f32"),
-            DType::F64(_) => write!(f, "f64"),
-            DType::U32(_) => write!(f, "u32"),
-            DType::U64(_) => write!(f, "u64"),
-            DType::Object(_) => write!(f, "object"),
+            DType::F32(val_) => write!(f, "{val_}"),
+            DType::F64(val_) => write!(f, "{val_}"),
+            DType::U32(val_) => write!(f, "{val_}"),
+            DType::U64(val_) => write!(f, "{val_}"),
+            DType::Object(val) => write!(f, "{val}"),
         }
     }
 }
