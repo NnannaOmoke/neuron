@@ -16,6 +16,7 @@ pub(crate) use std::{
     io::BufReader,
     ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Sub, SubAssign},
     path::PathBuf,
+    fmt::Display
 };
 
 // fn test_something(){

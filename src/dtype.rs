@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use crate::*;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
@@ -17,7 +15,7 @@ impl DType {
         match self {
             DType::None => match rhs.to_lowercase().as_str() {
                 _ => {
-                    eprintln!("None type is not convertible.");
+                    eprintln!("None type is not convertible. This will return none by default");
                     DType::None
                 }
             },
@@ -82,18 +80,6 @@ impl DType {
         string
     }
 
-    pub fn display_type(&self) -> String{
-        let mut string = String::new();
-        match self{
-            DType::None => string.push_str("None"),
-            DType::F32(_) => string.push_str("f32"),
-            DType::F64(_) => string.push_str("f64"),
-            DType::U32(_) => string.push_str("u32"),
-            DType::U64(_) => string.push_str("u64"),
-            DType::Object(_) => string.push_str("object"),
-        }
-        string
-    }
 }
 
 impl Add<&DType> for DType {
