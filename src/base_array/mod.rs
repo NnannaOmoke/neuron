@@ -206,7 +206,7 @@ impl<'a> BaseDataset<'a> {
     //this will, based on the selection given, return parts of the dataset that have cols that are...
     //of the dtype
     //it will return a read only reference to the current matrix, with maybe a few cols missing?
-    pub fn select_dtypes(&self, include: &[DType], exlude: Option<&[DType]>) -> &'a Self {
+    pub fn select_dtypes(&self, _include: &[DType], _exlude: Option<&[DType]>) -> &'a Self {
         todo!()
     }
     //returns the number of dimensions of the dataset
@@ -249,16 +249,16 @@ impl<'a> BaseDataset<'a> {
         prettytable.printstd();
     }
 
-    pub fn tail(&self, n: Option<usize>) -> (){
+    pub fn tail(&self, _n: Option<usize>){
         let _headers = self.column_names.unwrap_or(&[]);
         //we need to implement the double ended iterator trait for BaseMatrix for a more efficient implementation of this
         //all this will be replaced when that is done
         let _size = self.data.data.nrows();
 
     }
-    //display the data at a single point
-    pub fn display_point(&mut self, rindex: usize, colname: Option<String>){
-
+    //get the data at a single point
+    pub fn display_point(&self, rindex: usize, colname: Option<String>){
+        println!("{}", self.data.get(rindex, self._get_string_index(&colname.unwrap())))
     }
 
     //modify the data at a single point
