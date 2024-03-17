@@ -1,4 +1,3 @@
-use std::error::Error;
 
 use crate::{dtype::DType, *};
 
@@ -33,10 +32,12 @@ impl BaseMatrix {
     pub(crate) fn get_mut_row(&mut self, rindex: usize) -> Option<&mut [DType]> {
         self.data.row_mut(rindex).into_slice()
     }
-    pub(crate) fn get(&self, rindex: usize, cindex: usize) -> DType {
-        self.data.get((rindex, cindex)).unwrap().clone()
+    pub(crate) fn get(&self, rindex: usize, cindex: usize) -> &DType {
+        self.data.get((rindex, cindex)).unwrap()
     }
-
+    pub(crate) fn get_mut(&mut self, rindex: usize, cindex: usize) -> &mut DType{
+        self.data.get_mut((rindex, cindex)).unwrap()
+    }
     pub(crate) fn cols(&self) -> ColumnIter<'_> {
         ColumnIter {
             inner: self.data.columns().into_iter(),
@@ -237,8 +238,39 @@ impl<'a> BaseDataset<'a> {
         self.clone()
     }
     //returns the first n rows in the dataframe (usually this should be printed out as a table)
-    pub fn head(n: usize) -> (){
+    pub fn head(&self, n: Option<usize>) {
+        let headers = self.column_names.unwrap_or(&[]);
+        let data: Vec<Vec<DType>> = self.data.rows().take(n.unwrap_or(5)).map(|x| Vec::from(x.as_slice().unwrap())).collect();
+        //we have the headers and the data, now we just use a pretty print macro
+        let mut prettytable = prettytable::Table::new();
+        prettytable.add_row(headers.into());
+        for row in data{
+            prettytable.add_row(row.into());
+        }
+        prettytable.printstd();
+    }
 
+    pub fn tail(&self, n: Option<usize>) -> (){
+        let _headers = self.column_names.unwrap_or(&[]);
+        //we need to implement the double ended iterator trait for BaseMatrix for a more efficient implementation of this
+        //all this will be replaced when that is done
+        let _size = self.data.data.nrows();
+
+    }
+    //display the data at a single point
+    pub fn display_point(&mut self, rindex: usize, colname: Option<String>){
+
+    }
+
+    //modify the data at a single point
+    pub fn modify_point_(&mut self, rindex: usize, colname: Option<String>, new_point: DType) {
+        let index = self._get_string_index(&colname.unwrap_or_default());
+        let prev = self.data.get_mut(rindex, index);
+        *prev = new_point;
+    }
+
+    fn _get_string_index(&self, colname: &String) -> usize {
+        self.column_names.unwrap().iter().position(|x| x==colname).expect("Column name was not found")
     }
 
 }
@@ -247,8 +279,8 @@ impl<'a> Index<String> for BaseDataset<'a> {
     type Output = [DType];
     fn index(&self, index: String) -> &Self::Output {
         match self.column_names {
-            Some(names) => {
-                let index = names.binary_search(&index).expect("Invalid column name");
+            Some(_) => {
+                let index = self._get_string_index(&index);
                 self.data.get_row(index).expect("This shouldn't be broken")
             }
             None => panic!("Column names have not been provided!"),
