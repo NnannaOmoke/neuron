@@ -67,9 +67,9 @@ impl DType {
         }
     }
 
-    pub fn display_type(&self) -> String{
+    pub fn display_type(&self) -> String {
         let mut string = String::new();
-        match self{
+        match self {
             DType::None => string.push_str("None"),
             DType::F32(_) => string.push_str("f32"),
             DType::F64(_) => string.push_str("f64"),
@@ -80,6 +80,16 @@ impl DType {
         string
     }
 
+    pub fn type_size(&self) -> usize {
+        match self {
+            DType::None => 0,
+            DType::F32(_) => 4,
+            DType::F64(_) => 8,
+            DType::U32(_) => 4,
+            DType::U64(_) => 8,
+            DType::Object(data) => data.len(),
+        }
+    }
 }
 
 impl Add<&DType> for DType {
@@ -561,7 +571,7 @@ impl DivAssign<&DType> for DType {
 
 impl Display for DType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
+        match self {
             //maybe i was a little too hasty with this...
             //ugh i'll have to manually do this there, then
             DType::None => write!(f, "NAN"),

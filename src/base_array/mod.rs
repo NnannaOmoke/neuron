@@ -34,7 +34,7 @@ impl BaseMatrix {
     pub(crate) fn get(&self, rindex: usize, cindex: usize) -> &DType {
         self.data.get((rindex, cindex)).unwrap()
     }
-    pub(crate) fn get_mut(&mut self, rindex: usize, cindex: usize) -> &mut DType{
+    pub(crate) fn get_mut(&mut self, rindex: usize, cindex: usize) -> &mut DType {
         self.data.get_mut((rindex, cindex)).unwrap()
     }
     pub(crate) fn cols(&self) -> ColumnIter<'_> {
@@ -195,13 +195,66 @@ impl<'a> BaseDataset<'a> {
             Some(row) => {
                 //basically print the variants of the enum out
                 print!("[");
-                for elem in row{
+                for elem in row {
                     print!("{}, ", elem.display_type())
                 }
                 print!("]");
-            },
-            None => println!("[]")
-        }  
+            }
+            None => println!("[]"),
+        }
+    }
+    //return an estimate of the memory usage of each colunm in bytes
+    pub fn memory_usage(&self) -> Vec<usize> {
+        let mut return_val = Vec::new();
+        let (num_cols, num_rows) = self.data.shape();
+
+        //couldnt find the colunm iterator
+        for col_index in 0..num_cols {
+            let col = self.data.get_col(col_index).unwrap();
+            if num_rows == 0 {
+                return_val.push(0);
+            } else {
+                let size = match &col[0] {
+                    DType::Object(_) => {
+                        //for strings we want to check the all elements
+                        let mut col_size = 0usize;
+                        for elem in col {
+                            col_size += elem.type_size();
+                        }
+                        col_size
+                    }
+                    other => other.type_size() * num_rows,
+                };
+                return_val.push(size);
+            }
+        }
+        return_val
+    }
+    //return an estimate of the memory usage of the entire dataset
+    pub fn total_memory_usage(&self) -> usize {
+        let mut return_val = 0usize;
+        let (num_cols, num_rows) = self.data.shape();
+
+        if num_rows != 0 {
+            for col_index in 0..num_cols {
+                let col = self.data.get_col(col_index).unwrap();
+                {
+                    let size = match &col[0] {
+                        DType::Object(_) => {
+                            //for strings we want to check the all elements
+                            let mut col_size = 0usize;
+                            for elem in col {
+                                col_size += elem.type_size();
+                            }
+                            col_size
+                        }
+                        other => other.type_size() * num_rows,
+                    };
+                    return_val += size;
+                }
+            }
+        }
+        return_val
     }
     //this will, based on the selection given, return parts of the dataset that have cols that are...
     //of the dtype
@@ -233,28 +286,32 @@ impl<'a> BaseDataset<'a> {
         }
     }
     //why would you do this :(
-    pub fn deepcopy(&self,) -> Self{
+    pub fn deepcopy(&self) -> Self {
         self.clone()
     }
     //returns the first n rows in the dataframe (usually this should be printed out as a table)
     pub fn head(&self, n: Option<usize>) {
         let headers = self.column_names.unwrap_or(&[]);
-        let data: Vec<Vec<DType>> = self.data.rows().take(n.unwrap_or(5)).map(|x| Vec::from(x.as_slice().unwrap())).collect();
+        let data: Vec<Vec<DType>> = self
+            .data
+            .rows()
+            .take(n.unwrap_or(5))
+            .map(|x| Vec::from(x.as_slice().unwrap()))
+            .collect();
         //we have the headers and the data, now we just use a pretty print macro
         let mut prettytable = prettytable::Table::new();
         prettytable.add_row(headers.into());
-        for row in data{
+        for row in data {
             prettytable.add_row(row.into());
         }
         prettytable.printstd();
     }
 
-    pub fn tail(&self, _n: Option<usize>){
+    pub fn tail(&self, n: Option<usize>) -> () {
         let _headers = self.column_names.unwrap_or(&[]);
         //we need to implement the double ended iterator trait for BaseMatrix for a more efficient implementation of this
         //all this will be replaced when that is done
         let _size = self.data.data.nrows();
-
     }
     //get the data at a single point
     pub fn display_point(&self, rindex: usize, colname: Option<String>){
@@ -269,9 +326,12 @@ impl<'a> BaseDataset<'a> {
     }
 
     fn _get_string_index(&self, colname: &String) -> usize {
-        self.column_names.unwrap().iter().position(|x| x==colname).expect("Column name was not found")
+        self.column_names
+            .unwrap()
+            .iter()
+            .position(|x| x == colname)
+            .expect("Column name was not found")
     }
-
 }
 
 impl<'a> Index<String> for BaseDataset<'a> {
