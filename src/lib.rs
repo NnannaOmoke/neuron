@@ -6,27 +6,17 @@ mod base_array;
 pub mod dtype;
 
 //All imports are defined here and made (pub)crate
-pub(crate) use std::{
-    fs::OpenOptions, 
-    path::PathBuf,
-    io::BufReader,
-    collections::HashMap,
-    ops::{Add, AddAssign, Div, DivAssign, IndexMut, Mul, MulAssign, Sub, SubAssign, Index},
-};
 pub(crate) use core::num;
 pub(crate) use ndarray::{
-    Array2, 
-    Ix2, 
-    iter::LanesIter, 
-    ArrayBase, 
-    ArrayView, 
-    Axis, 
-    Dim, 
-    LinalgScalar, 
-    Ix1, 
-    ViewRepr
+    iter::LanesIter, Array2, ArrayBase, ArrayView, Axis, Dim, Ix1, Ix2, LinalgScalar, ViewRepr,
 };
-
+pub(crate) use std::{
+    collections::HashMap,
+    fs::OpenOptions,
+    io::BufReader,
+    ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Sub, SubAssign},
+    path::PathBuf,
+};
 
 // fn test_something(){
 //     let arr = nalgebra::DMatrix::repeat(100, 100, 4f32);
