@@ -1,4 +1,7 @@
+use micromath::F32;
+
 use crate::*;
+use std::mem::size_of;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum DType {
@@ -82,12 +85,23 @@ impl DType {
 
     pub fn type_size(&self) -> usize {
         match self {
-            DType::None => 0,
+            DType::None => size_of::<DType>(),
             DType::F32(_) => 4,
             DType::F64(_) => 8,
             DType::U32(_) => 4,
             DType::U64(_) => 8,
             DType::Object(data) => data.len(),
+        }
+    }
+
+    pub fn abs(&self) -> Self{
+        match self{
+            DType::None =>DType::None,
+            DType::F32(val) => DType::F32(val.abs()),
+            DType::F64(val) => DType::F64(val.abs()),
+            DType::U32(val) => DType::U32(*val),
+            DType::U64(val) => DType::U64(*val),
+            DType::Object(string) => DType::Object(string.to_string())
         }
     }
 }

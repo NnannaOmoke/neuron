@@ -7,9 +7,8 @@ pub(crate) struct BaseMatrix {
 }
 
 impl BaseMatrix {
-    //@Sporadic Creator you're going to have to save me on this one :(
-    // pub(crate) fn from_csv(sep: &str, fname: PathBuf) -> Self{
-    // }
+    //add some functionality to build from csv later
+
     pub(crate) fn transpose(self) -> Self {
         BaseMatrix {
             data: self.data.reversed_axes(),
@@ -37,12 +36,20 @@ impl BaseMatrix {
     pub(crate) fn get_mut(&mut self, rindex: usize, cindex: usize) -> &mut DType {
         self.data.get_mut((rindex, cindex)).unwrap()
     }
+    pub(crate) fn len(&self) -> usize{
+        self.data.nrows()
+    }
+    pub(crate) fn push_col(&mut self, slice: &[DType]){
+        self.data.push_column(slice.into()).expect("Shape is not compatible")
+    }
+    pub(crate) fn pop_col(&mut self) -> &[DType]{
+        todo!()
+    }
     pub(crate) fn cols(&self) -> ColumnIter<'_> {
         ColumnIter {
             inner: self.data.columns().into_iter(),
         }
     }
-
     pub(crate) fn rows(&self) -> RowIter<'_> {
         RowIter {
             inner: self.data.rows().into_iter(),
@@ -143,7 +150,7 @@ impl<'a> Iterator for RowIter<'a> {
 #[derive(Clone)]
 pub(crate) struct BaseDataset<'a> {
     data: BaseMatrix,
-    column_names: Option<&'a [String]>,
+    column_names: Vec<String>,
     std: Option<&'a [DType]>,
     mean: Option<&'a [DType]>,
     mode: Option<&'a [DType]>,
@@ -155,7 +162,7 @@ impl<'a> BaseDataset<'a> {
     pub fn from_matrix(
         data: BaseMatrix,
         compute_on_creation: bool,
-        colnames: Option<&'a [String]>,
+        colnames: Vec<String>,
     ) -> Self {
         if compute_on_creation {
             todo!()
@@ -173,11 +180,8 @@ impl<'a> BaseDataset<'a> {
     //we'll have to define a lot more convenience methods for instantiating this, however
 
     //returns the colum names of the basedataset
-    pub fn columns(&self) -> &'a [String] {
-        match self.column_names {
-            Some(names) => names,
-            None => &[],
-        }
+    pub fn columns(&self) -> &[String] {
+        self.column_names.as_slice()
     }
     //this can get a little tricky, but basically we're assuming this
     //every single column has a unique datatype, that everything under it follows
@@ -198,7 +202,7 @@ impl<'a> BaseDataset<'a> {
                 for elem in row {
                     print!("{}, ", elem.display_type())
                 }
-                print!("]");
+                print!("]\n");
             }
             None => println!("[]"),
         }
@@ -291,7 +295,7 @@ impl<'a> BaseDataset<'a> {
     }
     //returns the first n rows in the dataframe (usually this should be printed out as a table)
     pub fn head(&self, n: Option<usize>) {
-        let headers = self.column_names.unwrap_or(&[]);
+        let headers = &self.column_names;
         let data: Vec<Vec<DType>> = self
             .data
             .rows()
@@ -300,15 +304,15 @@ impl<'a> BaseDataset<'a> {
             .collect();
         //we have the headers and the data, now we just use a pretty print macro
         let mut prettytable = prettytable::Table::new();
-        prettytable.add_row(headers.into());
+        prettytable.set_titles(headers.into());
         for row in data {
             prettytable.add_row(row.into());
         }
         prettytable.printstd();
     }
 
-    pub fn tail(&self, n: Option<usize>) -> () {
-        let _headers = self.column_names.unwrap_or(&[]);
+    pub fn tail(&self, _n: Option<usize>){
+        let _headers = &self.column_names;
         //we need to implement the double ended iterator trait for BaseMatrix for a more efficient implementation of this
         //all this will be replaced when that is done
         let _size = self.data.data.nrows();
@@ -324,10 +328,73 @@ impl<'a> BaseDataset<'a> {
         let prev = self.data.get_mut(rindex, index);
         *prev = new_point;
     }
+    //consumes the dataset and returns the internal data
+    pub fn values(self) -> Array2<DType>{
+        self.data.data
+    }
 
+    pub fn push_col(&mut self, slice: &[DType], colname: Option<String>){
+        assert!(slice.len() == self.data.len());
+        match colname{
+            Some(var) => self.column_names.push(var),
+            None => {},
+        }
+        self.data.push_col(slice.into())
+    }
+
+    //returns an iterator over the columns
+    pub fn itercols(&self) -> ColumnIter<'_> {
+        self.data.cols()
+    }
+    //return an iterator over the rows
+    pub fn iterrows(&self) -> RowIter<'_>{
+        self.data.rows()
+    }
+    pub fn pop(&mut self) -> &'a [DType]{
+        todo!()
+    }
+    //outputs the given columns
+    pub fn col_get(&self, keys: &[String]){
+        todo!()
+    }
+
+    //Apply a function along a column
+    pub fn apply<T>(&mut self, colname: &String, mut function: T)
+    where T: FnMut(&DType) -> DType
+    {
+        for elem in self[colname.to_string()].iter_mut(){
+            *elem = function(elem);
+        }
+    }
+    //perform some function on a column
+    //very similar to apply
+    pub fn map<T>(&mut self, colname: &String, mut function: T)
+    where T: FnMut(&DType) -> DType
+    {
+        self[colname.to_string()].iter_mut().for_each(|elem|{*elem = function(elem)})
+    }
+
+    //apply a series of functions on a column
+    pub fn pipe<T>(&mut self, colname: &String, functions: &mut [T])
+    where T: FnMut(&DType) -> DType{
+        self[colname.to_string()].iter_mut().for_each(|elem| {
+            for func in functions.iter_mut(){
+                *elem = func(elem)
+            }
+        })
+    }
+    //returns a dataframe with all the elemnts having their abs value
+    pub fn abs(&self) -> Self{ 
+        let mut data = self.deepcopy();
+        for col in &self.column_names{
+            data.apply(col, DType::abs)
+        }
+        data
+    }
+
+    
     fn _get_string_index(&self, colname: &String) -> usize {
         self.column_names
-            .unwrap()
             .iter()
             .position(|x| x == colname)
             .expect("Column name was not found")
@@ -337,13 +404,8 @@ impl<'a> BaseDataset<'a> {
 impl<'a> Index<String> for BaseDataset<'a> {
     type Output = [DType];
     fn index(&self, index: String) -> &Self::Output {
-        match self.column_names {
-            Some(_) => {
-                let index = self._get_string_index(&index);
-                self.data.get_row(index).expect("This shouldn't be broken")
-            }
-            None => panic!("Column names have not been provided!"),
-        }
+        let index = self._get_string_index(&index);
+        self.data.get_row(index).expect("This shouldn't be broken")
     }
 }
 
@@ -360,15 +422,10 @@ impl<'a> Index<usize> for BaseDataset<'a> {
 
 impl<'a> IndexMut<String> for BaseDataset<'a> {
     fn index_mut(&mut self, index: String) -> &mut Self::Output {
-        match self.column_names {
-            Some(names) => {
-                let index = names.binary_search(&index).expect("Invalid column name");
-                self.data
-                    .get_mut_col(index)
-                    .expect("This shouldn't be broken")
-            }
-            None => panic!("Column names have not been provided!"),
-        }
+        let index = self._get_string_index(&index);
+        self.data
+            .get_mut_col(index)
+            .expect("This shouldn't be broken")
     }
 }
 
