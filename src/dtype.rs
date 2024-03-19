@@ -61,17 +61,8 @@ impl DType {
         }
     }
 
-    pub fn display_type(&self) -> String {
-        let mut string = String::new();
-        match self {
-            DType::None => string.push_str("None"),
-            DType::F32(_) => string.push_str("f32"),
-            DType::F64(_) => string.push_str("f64"),
-            DType::U32(_) => string.push_str("u32"),
-            DType::U64(_) => string.push_str("u64"),
-            DType::Object(_) => string.push_str("object"),
-        }
-        string
+    pub fn data_type(&self) -> DTypeType {
+        DTypeType::from(self)
     }
 
     pub fn type_size(&self) -> usize {
@@ -586,7 +577,7 @@ pub enum Error {
     ParseFloat(#[from] core::num::ParseFloatError),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DTypeType {
     None,
     U32,
@@ -594,4 +585,38 @@ pub enum DTypeType {
     F32,
     F64,
     Object,
+}
+
+impl DTypeType {
+    pub fn display_str(&self) -> &'static str {
+        match self {
+            DTypeType::None => "None",
+            DTypeType::U32 => "u32",
+            DTypeType::U64 => "u64",
+            DTypeType::F32 => "f32",
+            DTypeType::F64 => "f64",
+            DTypeType::Object => "object",
+        }
+    }
+}
+
+impl Display for DTypeType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.display_str())?;
+
+        Ok(())
+    }
+}
+
+impl From<&DType> for DTypeType {
+    fn from(value: &DType) -> Self {
+        match value {
+            DType::None => DTypeType::None,
+            DType::U32(_) => DTypeType::U32,
+            DType::U64(_) => DTypeType::U64,
+            DType::F32(_) => DTypeType::F32,
+            DType::F64(_) => DTypeType::F64,
+            DType::Object(_) => DTypeType::Object,
+        }
+    }
 }

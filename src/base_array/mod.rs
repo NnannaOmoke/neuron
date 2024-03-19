@@ -199,7 +199,7 @@ impl<'a> BaseDataset<'a> {
                 //basically print the variants of the enum out
                 print!("[");
                 for elem in row {
-                    print!("{}, ", elem.display_type())
+                    print!("{}, ", elem.data_type().display_str())
                 }
                 print!("]");
             }
