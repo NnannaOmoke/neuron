@@ -156,10 +156,6 @@ impl<'a> BaseDataset<'a> {
 
         Ok(())
     }
-    //why would you do this :(
-    pub fn deepcopy(&self) -> Self {
-        self.clone()
-    }
     //returns the first n rows in the dataframe (usually this should be printed out as a table)
     pub fn head(&self, n: Option<usize>) {
         let headers = self.column_names.unwrap_or(&[]);
