@@ -12,11 +12,11 @@ pub(crate) use ndarray::{
 };
 pub(crate) use std::{
     collections::HashMap,
+    fmt::Display,
     fs::OpenOptions,
     io::BufReader,
     ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Sub, SubAssign},
     path::PathBuf,
-    fmt::Display
 };
 
 // fn test_something(){

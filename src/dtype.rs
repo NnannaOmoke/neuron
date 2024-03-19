@@ -1,4 +1,6 @@
 use crate::*;
+use core::fmt;
+use thiserror::Error;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum DType {
@@ -11,58 +13,50 @@ pub enum DType {
 }
 
 impl DType {
-    pub fn cast(&self, rhs: &String) -> Self {
+    // Prime candidate for marcroization 👇
+    pub fn cast(&self, rhs: DTypeType) -> Result<Self, Error> {
         match self {
-            DType::None => match rhs.to_lowercase().as_str() {
-                _ => {
-                    eprintln!("None type is not convertible. This will return none by default");
-                    DType::None
-                }
+            //None type is not convertible. This will return none by default.
+            DType::None => Ok(DType::None),
+            DType::F32(value) => match rhs {
+                DTypeType::None => Ok(DType::None),
+                DTypeType::U32 => Ok(DType::U32(*value as u32)),
+                DTypeType::U64 => Ok(DType::U64(*value as u64)),
+                DTypeType::F32 => Ok(DType::F32(*value)),
+                DTypeType::F64 => Ok(DType::F64(*value as f64)),
+                DTypeType::Object => Ok(DType::Object(value.to_string())),
             },
-            DType::F32(value) => match rhs.to_lowercase().as_str() {
-                "none" => DType::None,
-                "u32" => DType::U32(*value as u32),
-                "u64" => DType::U64(*value as u64),
-                "f32" => DType::F32(*value),
-                "f64" => DType::F64(*value as f64),
-                "string" => DType::Object(value.to_string()),
-                _ => panic!("Invalid datatype variant given"),
+            DType::F64(value) => match rhs {
+                DTypeType::None => Ok(DType::None),
+                DTypeType::U32 => Ok(DType::U32(*value as u32)),
+                DTypeType::U64 => Ok(DType::U64(*value as u64)),
+                DTypeType::F32 => Ok(DType::F32(*value as f32)),
+                DTypeType::F64 => Ok(DType::F64(*value)),
+                DTypeType::Object => Ok(DType::Object(value.to_string())),
             },
-            DType::F64(value) => match rhs.to_lowercase().as_str() {
-                "none" => DType::None,
-                "u32" => DType::U32(*value as u32),
-                "u64" => DType::U64(*value as u64),
-                "f32" => DType::F32(*value as f32),
-                "f64" => DType::F64(*value),
-                "string" => DType::Object(value.to_string()),
-                _ => panic!("Invalid datatype variant given"),
+            DType::U32(value) => match rhs {
+                DTypeType::None => Ok(DType::None),
+                DTypeType::U32 => Ok(DType::U32(*value)),
+                DTypeType::U64 => Ok(DType::U64(*value as u64)),
+                DTypeType::F32 => Ok(DType::F32(*value as f32)),
+                DTypeType::F64 => Ok(DType::F64(*value as f64)),
+                DTypeType::Object => Ok(DType::Object(value.to_string())),
             },
-            DType::U32(value) => match rhs.to_lowercase().as_str() {
-                "none" => DType::None,
-                "u32" => DType::U32(*value),
-                "u64" => DType::U64(*value as u64),
-                "f32" => DType::F32(*value as f32),
-                "f64" => DType::F64(*value as f64),
-                "string" => DType::Object(value.to_string()),
-                _ => panic!("Invalid datatype variant given"),
+            DType::U64(value) => match rhs {
+                DTypeType::None => Ok(DType::None),
+                DTypeType::U32 => Ok(DType::U32(*value as u32)),
+                DTypeType::U64 => Ok(DType::U64(*value)),
+                DTypeType::F32 => Ok(DType::F32(*value as f32)),
+                DTypeType::F64 => Ok(DType::F64(*value as f64)),
+                DTypeType::Object => Ok(DType::Object(value.to_string())),
             },
-            DType::U64(value) => match rhs.to_lowercase().as_str() {
-                "none" => DType::None,
-                "u32" => DType::U32(*value as u32),
-                "u64" => DType::U64(*value),
-                "f32" => DType::F32(*value as f32),
-                "f64" => DType::F64(*value as f64),
-                "string" => DType::Object(value.to_string()),
-                _ => panic!("Invalid datatype variant given"),
-            },
-            DType::Object(value) => match rhs.to_lowercase().as_str() {
-                "none" => DType::None,
-                "u32" => DType::U32(str::parse::<u32>(value).expect("Parse failed!")),
-                "u64" => DType::U64(str::parse::<u64>(value).expect("Parse failed!")),
-                "f32" => DType::F32(str::parse::<f32>(value).expect("Parse failed!")),
-                "f64" => DType::F64(str::parse::<f64>(value).expect("Parse failed!")),
-                "string" => DType::Object(value.to_string()),
-                _ => panic!("Invalid datatype variant given"),
+            DType::Object(value) => match rhs {
+                DTypeType::None => Ok(DType::None),
+                DTypeType::U32 => Ok(DType::U32(str::parse::<u32>(value)?)),
+                DTypeType::U64 => Ok(DType::U64(str::parse::<u64>(value)?)),
+                DTypeType::F32 => Ok(DType::F32(str::parse::<f32>(value)?)),
+                DTypeType::F64 => Ok(DType::F64(str::parse::<f64>(value)?)),
+                DTypeType::Object => Ok(DType::Object(value.to_string())),
             },
         }
     }
@@ -570,7 +564,7 @@ impl DivAssign<&DType> for DType {
 }
 
 impl Display for DType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             //maybe i was a little too hasty with this...
             //ugh i'll have to manually do this there, then
@@ -582,4 +576,22 @@ impl Display for DType {
             DType::Object(val) => write!(f, "{val}"),
         }
     }
+}
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(transparent)]
+    ParseInt(#[from] core::num::ParseIntError),
+    #[error(transparent)]
+    ParseFloat(#[from] core::num::ParseFloatError),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DTypeType {
+    None,
+    U32,
+    U64,
+    F32,
+    F64,
+    Object,
 }

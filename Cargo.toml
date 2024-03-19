@@ -9,6 +9,7 @@ edition = "2021"
 micromath = "2.1.0"
 ndarray = {version = "0.15.6", features = ["std", "serde", "rayon"]}
 prettytable = "0.10.0"
+thiserror = "1.0.58"
 
 [dev-dependencies]
 criterion = "0.3"

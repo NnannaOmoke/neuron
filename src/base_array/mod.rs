@@ -1,4 +1,7 @@
-use crate::{dtype::DType, *};
+use crate::{
+    dtype::{self, DType, DTypeType},
+    *,
+};
 
 #[repr(C)]
 #[derive(Clone)]
@@ -275,15 +278,21 @@ impl<'a> BaseDataset<'a> {
         self.data.shape()
     }
     //cast all elements in a column to that of another dtype
-    pub fn astype(&mut self, colname: Option<String>, dtype: String) {
+    pub fn astype(
+        &mut self,
+        colname: Option<String>,
+        dtype: DTypeType,
+    ) -> Result<(), dtype::Error> {
         match colname {
             Some(name) => {
                 for elem in &mut self[name] {
-                    *elem = elem.cast(&dtype);
+                    *elem = elem.cast(dtype)?;
                 }
             }
             None => {}
         }
+
+        Ok(())
     }
     //why would you do this :(
     pub fn deepcopy(&self) -> Self {
@@ -314,8 +323,12 @@ impl<'a> BaseDataset<'a> {
         let _size = self.data.data.nrows();
     }
     //get the data at a single point
-    pub fn display_point(&self, rindex: usize, colname: Option<String>){
-        println!("{}", self.data.get(rindex, self._get_string_index(&colname.unwrap())))
+    pub fn display_point(&self, rindex: usize, colname: Option<String>) {
+        println!(
+            "{}",
+            self.data
+                .get(rindex, self._get_string_index(&colname.unwrap()))
+        )
     }
 
     //modify the data at a single point
