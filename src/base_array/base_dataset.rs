@@ -37,6 +37,24 @@ impl<'a> BaseDataset<'a> {
     }
     //we'll have to define a lot more convenience methods for instantiating this, however
 
+    pub fn get_col(&self, cindex: usize) -> Option<&[DType]> {
+        self.data.get_col(cindex)
+    }
+
+    pub fn get_col_mut(&mut self, cindex: usize) -> Option<&mut [DType]> {
+        self.data.get_mut_col(cindex)
+        // Recalculate cached values
+    }
+
+    pub fn get_row(&self, cindex: usize) -> Option<&[DType]> {
+        self.data.get_row(cindex)
+    }
+
+    pub fn get_row_mut(&mut self, cindex: usize) -> Option<& mut[DType]> {
+        self.data.get_mut_row(cindex)
+        // Recalculate cached values
+    }
+
     //returns the colum names of the basedataset
     pub fn columns(&self) -> &'a [String] {
         match self.column_names {
