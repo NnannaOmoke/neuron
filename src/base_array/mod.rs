@@ -12,9 +12,8 @@ pub(crate) struct BaseMatrix {
 }
 
 impl BaseMatrix {
-    //@Sporadic Creator you're going to have to save me on this one :(
-    // pub(crate) fn from_csv(sep: &str, fname: PathBuf) -> Self{
-    // }
+    //add some functionality to build from csv later
+
     pub(crate) fn transpose(self) -> Self {
         BaseMatrix {
             data: self.data.reversed_axes(),
@@ -42,12 +41,20 @@ impl BaseMatrix {
     pub(crate) fn get_mut(&mut self, rindex: usize, cindex: usize) -> &mut DType {
         self.data.get_mut((rindex, cindex)).unwrap()
     }
+    pub(crate) fn len(&self) -> usize{
+        self.data.nrows()
+    }
+    pub(crate) fn push_col(&mut self, slice: &[DType]){
+        self.data.push_column(slice.into()).expect("Shape is not compatible")
+    }
+    pub(crate) fn pop_col(&mut self) -> &[DType]{
+        todo!()
+    }
     pub(crate) fn cols(&self) -> ColumnIter<'_> {
         ColumnIter {
             inner: self.data.columns().into_iter(),
         }
     }
-
     pub(crate) fn rows(&self) -> RowIter<'_> {
         RowIter {
             inner: self.data.rows().into_iter(),
