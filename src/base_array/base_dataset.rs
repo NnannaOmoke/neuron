@@ -1,6 +1,9 @@
+use std::sync::RwLock;
+
+use ndarray::IndexLonger;
+
 use crate::dtype::{self, DType, DTypeType};
-use super::BaseMatrix;
-use core::ops::{Index, IndexMut};
+use super::*;
 
 //this will be the dataset visible to the external users
 //we'll implement quite the number of methods for this, hopefully
@@ -8,7 +11,7 @@ use core::ops::{Index, IndexMut};
 #[derive(Clone)]
 pub(crate) struct BaseDataset<'a> {
     data: BaseMatrix,
-    column_names: Option<&'a [String]>,
+    column_names: Vec<String>,
     std: Option<&'a [DType]>,
     mean: Option<&'a [DType]>,
     mode: Option<&'a [DType]>,
@@ -20,7 +23,7 @@ impl<'a> BaseDataset<'a> {
     pub fn from_matrix(
         data: BaseMatrix,
         compute_on_creation: bool,
-        colnames: Option<&'a [String]>,
+        colnames: Vec<String>,
     ) -> Self {
         if compute_on_creation {
             todo!()
@@ -56,11 +59,8 @@ impl<'a> BaseDataset<'a> {
     }
 
     //returns the colum names of the basedataset
-    pub fn columns(&self) -> &'a [String] {
-        match self.column_names {
-            Some(names) => names,
-            None => &[],
-        }
+    pub fn columns(&self) -> Vec<String>{
+        self.column_names.clone()
     }
     //this can get a little tricky, but basically we're assuming this
     //every single column has a unique datatype, that everything under it follows
@@ -176,7 +176,7 @@ impl<'a> BaseDataset<'a> {
     }
     //returns the first n rows in the dataframe (usually this should be printed out as a table)
     pub fn head(&self, n: Option<usize>) {
-        let headers = self.column_names.unwrap_or(&[]);
+        let headers = &self.column_names;
         let data: Vec<Vec<DType>> = self
             .data
             .rows()
@@ -193,7 +193,7 @@ impl<'a> BaseDataset<'a> {
     }
 
     pub fn tail(&self, n: Option<usize>) -> () {
-        let _headers = self.column_names.unwrap_or(&[]);
+        let _headers = &self.column_names;
         //we need to implement the double ended iterator trait for BaseMatrix for a more efficient implementation of this
         //all this will be replaced when that is done
         let _size = self.data.data.nrows();
@@ -213,10 +213,55 @@ impl<'a> BaseDataset<'a> {
         let prev = self.data.get_mut(rindex, index);
         *prev = new_point;
     }
+    //add a column to the data
+    pub fn push_col(&mut self, colname: String, slice: &[DType]){
+        self.column_names.push(colname);
+        self.data.push_col(slice)
+    }
+    //iterator over column name, data pairs
+    pub fn items(&mut self) -> Zip<Iter<String>, base_array::ColumnIter<'_>>{
+        zip(&self.column_names, self.data.cols())
+    }
+    //iterator over row-index, data pairs
+    //note that indexes are movable, for now
+    pub fn iterrows(&self) -> Zip<Range<usize>, RowIter<'_>>{
+        zip(0..self.data.len(), self.data.rows())
+    }
+    //iterator over rows
+    pub fn itertuples(&self) -> RowIter<'_>{
+        self.data.rows()
+    }
+    //should pop the last item in the queue
+    pub fn pop(&mut self){
+        todo!()
+    }
+    //applies a function to a given range
+    pub fn apply<F>(&mut self, range: Range<usize>, mut function: F)
+    where F: FnMut(&mut DType) -> (){
+        self[range].iter_mut().for_each(|x| {function(x)})
+    }
+    //applies a function to a column
+    pub fn map<F>(&mut self, colname: String, mut function: F)
+    where F: FnMut(&mut DType) -> (){
+        let col_index = self._get_string_index(&colname);
+        self[col_index].iter_mut().for_each(|x| function(x))
+    }
+    //applies a series of functions to a column
+    pub fn pipe<F> (&mut self, colname: String, functions: &mut [F])
+    where F: FnMut(&mut DType) -> (){
+        let col_index = self._get_string_index(&colname);
+        self[col_index].iter_mut().for_each(|x|{
+            functions.iter_mut().for_each(|f| f(x))
+        })
+    }
+    //gets the absolute values of all the columns in the dataframe
+    pub fn abs(&mut self){
+        self.apply(Range{start: 0, end: self.data.len()}, DType::abs)
+    }
+
 
     fn _get_string_index(&self, colname: &String) -> usize {
         self.column_names
-            .unwrap()
             .iter()
             .position(|x| x == colname)
             .expect("Column name was not found")
@@ -226,13 +271,8 @@ impl<'a> BaseDataset<'a> {
 impl<'a> Index<String> for BaseDataset<'a> {
     type Output = [DType];
     fn index(&self, index: String) -> &Self::Output {
-        match self.column_names {
-            Some(_) => {
-                let index = self._get_string_index(&index);
-                self.data.get_row(index).expect("This shouldn't be broken")
-            }
-            None => panic!("Column names have not been provided!"),
-        }
+        let index = self._get_string_index(&index);
+        self.get_col(index).unwrap()
     }
 }
 
@@ -247,17 +287,25 @@ impl<'a> Index<usize> for BaseDataset<'a> {
     }
 }
 
+impl <'a> Index<Range<usize>> for BaseDataset<'a>{
+    type Output = [DType];
+    fn index(&self, index: Range<usize>) -> &Self::Output {
+        &self.data.data.as_slice().unwrap()[index]
+    }
+}
+
+impl <'a> IndexMut<Range<usize>> for BaseDataset<'a>{
+    fn index_mut(&mut self, index: Range<usize>) -> &mut Self::Output {
+        &mut self.data.data.as_slice_mut().unwrap()[index]
+    }
+}
+
 impl<'a> IndexMut<String> for BaseDataset<'a> {
     fn index_mut(&mut self, index: String) -> &mut Self::Output {
-        match self.column_names {
-            Some(names) => {
-                let index = names.binary_search(&index).expect("Invalid column name");
-                self.data
-                    .get_mut_col(index)
-                    .expect("This shouldn't be broken")
-            }
-            None => panic!("Column names have not been provided!"),
-        }
+        let index = self.column_names.iter().position(|x| *x == index).expect("Element could not be found");
+        self.data
+            .get_mut_col(index)
+            .expect("This shouldn't be broken")
     }
 }
 
@@ -270,3 +318,5 @@ impl<'a> IndexMut<usize> for BaseDataset<'a> {
         }
     }
 }
+
+

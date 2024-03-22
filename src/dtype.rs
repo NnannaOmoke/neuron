@@ -1,5 +1,6 @@
 use micromath::F32;
 
+use std::mem;
 use crate::*;
 use core::fmt;
 use thiserror::Error;
@@ -69,7 +70,7 @@ impl DType {
 
     pub fn type_size(&self) -> usize {
         match self {
-            DType::None => size_of::<DType>(),
+            DType::None => mem::size_of::<DType>(),
             DType::F32(_) => 4,
             DType::F64(_) => 8,
             DType::U32(_) => 4,
@@ -78,14 +79,14 @@ impl DType {
         }
     }
 
-    pub fn abs(&self) -> Self{
+    pub fn abs(&mut self){
         match self{
-            DType::None =>DType::None,
-            DType::F32(val) => DType::F32(val.abs()),
-            DType::F64(val) => DType::F64(val.abs()),
-            DType::U32(val) => DType::U32(*val),
-            DType::U64(val) => DType::U64(*val),
-            DType::Object(string) => DType::Object(string.to_string())
+            DType::None =>{},
+            DType::F32(val) => *val = val.abs(),
+            DType::F64(val) => *val = val.abs(),
+            DType::U32(_) => {},
+            DType::U64(_) => {},
+            DType::Object(_) => {}
         }
     }
 }
