@@ -2,7 +2,7 @@ use micromath::F32;
 
 use std::mem;
 use crate::*;
-use core::fmt;
+use core::{str::FromStr, num::{ParseFloatError, ParseIntError}, fmt};
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
@@ -87,6 +87,32 @@ impl DType {
             DType::U32(_) => {},
             DType::U64(_) => {},
             DType::Object(_) => {}
+        }
+    }
+
+    pub fn parses_to_none(input: &str) -> bool {
+        matches!(input, "na" | "NA" | "n/a" | "N/A" | "N/a" | "nan" | "NaN" | "Nan")
+    }
+
+    pub fn parse_from_str(input: &str, prefer_precision: bool) -> Self {
+        if Self::parses_to_none(input) {
+            DType::None
+        } else {
+            if prefer_precision {
+                f64::from_str(input)
+                    .map(DType::F64)
+                    .or(f32::from_str(input).map(DType::F32))
+                    .or(u64::from_str(input).map(DType::U64))
+                    .or(u32::from_str(input).map(DType::U32))
+                    .unwrap_or_else(|_| DType::Object(input.to_string()))
+            } else {
+                f32::from_str(input)
+                    .map(DType::F32)
+                    .or(f64::from_str(input).map(DType::F64))
+                    .or(u32::from_str(input).map(DType::U32))
+                    .or(u64::from_str(input).map(DType::U64))
+                    .unwrap_or_else(|_| DType::Object(input.to_string()))
+            }
         }
     }
 }

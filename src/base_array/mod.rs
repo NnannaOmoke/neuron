@@ -4,6 +4,9 @@ use crate::{
     dtype::{self, DType, DTypeType},
     *,
 };
+use ndarray::{ArrayView1, ShapeError};
+use std::io::Read;
+use thiserror::Error;
 
 #[repr(C)]
 #[derive(Clone)]
@@ -59,6 +62,55 @@ impl BaseMatrix {
         RowIter {
             inner: self.data.rows().into_iter(),
         }
+    }
+
+    pub(crate) fn try_from_csv<R: Read>(
+        reader: csv::Reader<R>,
+        prefer_precision: bool
+    ) -> Result<Self, Error> {
+        // The nice thing about this code is that we don't have to check col sizes; `csv` does this
+        // automatically.
+        let mut arr = Array2::from_elem((0, 0), DType::None);
+        let mut col_types = Vec::new();
+        let mut row = Vec::new();
+        let mut records = reader.into_records();
+        let first_record = if let Some(rr) = records.next() {
+            rr?
+        } else {
+            return Ok(BaseMatrix {
+                data: arr,
+            })
+        };
+        for field in first_record.iter() {
+            let field_data = DType::parse_from_str(field, prefer_precision);
+            let field_data_type = field_data.data_type();
+            col_types.push(field_data_type);
+            row.push(field_data);
+        }
+        arr.push_row(ArrayView1::from(&row))?;
+        for record_res in records {
+            let record = record_res?;
+            for (i, field) in record.into_iter().enumerate() {
+                let dtype = DType::parse_from_str(field, prefer_precision);
+                // SAFETY: If the record we got had a different number of fields, the read method would
+                // have failed based on the way the csv Reader works.
+                let expected_data_type = row[i].data_type();
+                let found_data_type = dtype.data_type();
+                if found_data_type == expected_data_type {
+                    row[i] = dtype;
+                } else {
+                    return Err(Error::MismatchedDTypes {
+                        expected_data_type,
+                        found_data_type,
+                    })
+                }
+            }
+            arr.push_row(ArrayView1::from(&row))?;
+        }
+
+        Ok(BaseMatrix {
+            data: arr,
+        })
     }
 }
 
@@ -123,6 +175,19 @@ impl Mul<BaseMatrix> for BaseMatrix {
         //Uninmplemented because matrix multiplication is not commutative and i'll have to clone()
         self
     }
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum Error {
+    #[error("columns of matrix were not all of same data type")]
+    MismatchedDTypes {
+        expected_data_type: DTypeType,
+        found_data_type: DTypeType,
+    },
+    #[error(transparent)]
+    CsvError(#[from] csv::Error),
+    #[error(transparent)]
+    ShapeError(#[from] ShapeError),
 }
 
 pub(crate) struct ColumnIter<'a> {
