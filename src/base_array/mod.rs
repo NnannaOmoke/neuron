@@ -44,13 +44,15 @@ impl BaseMatrix {
     pub(crate) fn get_mut(&mut self, rindex: usize, cindex: usize) -> &mut DType {
         self.data.get_mut((rindex, cindex)).unwrap()
     }
-    pub(crate) fn len(&self) -> usize{
+    pub(crate) fn len(&self) -> usize {
         self.data.nrows()
     }
-    pub(crate) fn push_col(&mut self, slice: &[DType]){
-        self.data.push_column(slice.into()).expect("Shape is not compatible")
+    pub(crate) fn push_col(&mut self, slice: &[DType]) {
+        self.data
+            .push_column(slice.into())
+            .expect("Shape is not compatible")
     }
-    pub(crate) fn pop_col(&mut self) -> &[DType]{
+    pub(crate) fn pop_col(&mut self) -> &[DType] {
         todo!()
     }
     pub(crate) fn cols(&self) -> ColumnIter<'_> {
@@ -66,7 +68,7 @@ impl BaseMatrix {
 
     pub(crate) fn try_from_csv<R: Read>(
         reader: csv::Reader<R>,
-        prefer_precision: bool
+        prefer_precision: bool,
     ) -> Result<Self, Error> {
         // The nice thing about this code is that we don't have to check col sizes; `csv` does this
         // automatically.
@@ -77,9 +79,7 @@ impl BaseMatrix {
         let first_record = if let Some(rr) = records.next() {
             rr?
         } else {
-            return Ok(BaseMatrix {
-                data: arr,
-            })
+            return Ok(BaseMatrix { data: arr });
         };
         for field in first_record.iter() {
             let field_data = DType::parse_from_str(field, prefer_precision);
@@ -102,15 +102,13 @@ impl BaseMatrix {
                     return Err(Error::MismatchedDTypes {
                         expected_data_type,
                         found_data_type,
-                    })
+                    });
                 }
             }
             arr.push_row(ArrayView1::from(&row))?;
         }
 
-        Ok(BaseMatrix {
-            data: arr,
-        })
+        Ok(BaseMatrix { data: arr })
     }
 }
 

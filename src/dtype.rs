@@ -1,8 +1,12 @@
 use micromath::F32;
 
-use std::mem;
 use crate::*;
-use core::{str::FromStr, num::{ParseFloatError, ParseIntError}, fmt};
+use core::{
+    fmt,
+    num::{ParseFloatError, ParseIntError},
+    str::FromStr,
+};
+use std::mem;
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
@@ -79,19 +83,22 @@ impl DType {
         }
     }
 
-    pub fn abs(&mut self){
-        match self{
-            DType::None =>{},
+    pub fn abs(&mut self) {
+        match self {
+            DType::None => {}
             DType::F32(val) => *val = val.abs(),
             DType::F64(val) => *val = val.abs(),
-            DType::U32(_) => {},
-            DType::U64(_) => {},
+            DType::U32(_) => {}
+            DType::U64(_) => {}
             DType::Object(_) => {}
         }
     }
 
     pub fn parses_to_none(input: &str) -> bool {
-        matches!(input, "na" | "NA" | "n/a" | "N/A" | "N/a" | "nan" | "NaN" | "Nan")
+        matches!(
+            input,
+            "na" | "NA" | "n/a" | "N/A" | "N/a" | "nan" | "NaN" | "Nan"
+        )
     }
 
     pub fn parse_from_str(input: &str, prefer_precision: bool) -> Self {

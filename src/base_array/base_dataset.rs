@@ -2,8 +2,9 @@ use std::sync::RwLock;
 
 use ndarray::IndexLonger;
 
-use crate::dtype::{self, DType, DTypeType};
 use super::*;
+use crate::dtype::{self, DType, DTypeType};
+use std::io::Read;
 
 //this will be the dataset visible to the external users
 //we'll implement quite the number of methods for this, hopefully
@@ -20,11 +21,7 @@ pub(crate) struct BaseDataset<'a> {
 }
 
 impl<'a> BaseDataset<'a> {
-    pub fn from_matrix(
-        data: BaseMatrix,
-        compute_on_creation: bool,
-        colnames: Vec<String>,
-    ) -> Self {
+    pub fn from_matrix(data: BaseMatrix, compute_on_creation: bool, colnames: Vec<String>) -> Self {
         if compute_on_creation {
             todo!()
         }
@@ -40,6 +37,19 @@ impl<'a> BaseDataset<'a> {
     }
     //we'll have to define a lot more convenience methods for instantiating this, however
 
+    pub fn try_from_csv_reader<R: Read>(
+        reader: csv::Reader<R>,
+        prefer_precision: bool,
+        compute_on_creation: bool,
+        colnames: Vec<String>,
+    ) -> Result<Self, super::Error> {
+        Ok(BaseDataset::from_matrix(
+            BaseMatrix::try_from_csv(reader, prefer_precision)?,
+            compute_on_creation,
+            colnames,
+        ))
+    }
+
     pub fn get_col(&self, cindex: usize) -> Option<&[DType]> {
         self.data.get_col(cindex)
     }
@@ -53,13 +63,13 @@ impl<'a> BaseDataset<'a> {
         self.data.get_row(cindex)
     }
 
-    pub fn get_row_mut(&mut self, cindex: usize) -> Option<& mut[DType]> {
+    pub fn get_row_mut(&mut self, cindex: usize) -> Option<&mut [DType]> {
         self.data.get_mut_row(cindex)
         // Recalculate cached values
     }
 
     //returns the colum names of the basedataset
-    pub fn columns(&self) -> Vec<String>{
+    pub fn columns(&self) -> Vec<String> {
         self.column_names.clone()
     }
     //this can get a little tricky, but basically we're assuming this
@@ -214,51 +224,62 @@ impl<'a> BaseDataset<'a> {
         *prev = new_point;
     }
     //add a column to the data
-    pub fn push_col(&mut self, colname: String, slice: &[DType]){
+    pub fn push_col(&mut self, colname: String, slice: &[DType]) {
         self.column_names.push(colname);
         self.data.push_col(slice)
     }
     //iterator over column name, data pairs
-    pub fn items(&mut self) -> Zip<Iter<String>, base_array::ColumnIter<'_>>{
+    pub fn items(&mut self) -> Zip<Iter<String>, base_array::ColumnIter<'_>> {
         zip(&self.column_names, self.data.cols())
     }
     //iterator over row-index, data pairs
     //note that indexes are movable, for now
-    pub fn iterrows(&self) -> Zip<Range<usize>, RowIter<'_>>{
+    pub fn iterrows(&self) -> Zip<Range<usize>, RowIter<'_>> {
         zip(0..self.data.len(), self.data.rows())
     }
     //iterator over rows
-    pub fn itertuples(&self) -> RowIter<'_>{
+    pub fn itertuples(&self) -> RowIter<'_> {
         self.data.rows()
     }
     //should pop the last item in the queue
-    pub fn pop(&mut self){
+    pub fn pop(&mut self) {
         todo!()
     }
     //applies a function to a given range
     pub fn apply<F>(&mut self, range: Range<usize>, mut function: F)
-    where F: FnMut(&mut DType) -> (){
-        self[range].iter_mut().for_each(|x| {function(x)})
+    where
+        F: FnMut(&mut DType) -> (),
+    {
+        self[range].iter_mut().for_each(|x| function(x))
     }
     //applies a function to a column
     pub fn map<F>(&mut self, colname: String, mut function: F)
-    where F: FnMut(&mut DType) -> (){
+    where
+        F: FnMut(&mut DType) -> (),
+    {
         let col_index = self._get_string_index(&colname);
         self[col_index].iter_mut().for_each(|x| function(x))
     }
     //applies a series of functions to a column
-    pub fn pipe<F> (&mut self, colname: String, functions: &mut [F])
-    where F: FnMut(&mut DType) -> (){
+    pub fn pipe<F>(&mut self, colname: String, functions: &mut [F])
+    where
+        F: FnMut(&mut DType) -> (),
+    {
         let col_index = self._get_string_index(&colname);
-        self[col_index].iter_mut().for_each(|x|{
-            functions.iter_mut().for_each(|f| f(x))
-        })
+        self[col_index]
+            .iter_mut()
+            .for_each(|x| functions.iter_mut().for_each(|f| f(x)))
     }
     //gets the absolute values of all the columns in the dataframe
-    pub fn abs(&mut self){
-        self.apply(Range{start: 0, end: self.data.len()}, DType::abs)
+    pub fn abs(&mut self) {
+        self.apply(
+            Range {
+                start: 0,
+                end: self.data.len(),
+            },
+            DType::abs,
+        )
     }
-
 
     fn _get_string_index(&self, colname: &String) -> usize {
         self.column_names
@@ -287,14 +308,14 @@ impl<'a> Index<usize> for BaseDataset<'a> {
     }
 }
 
-impl <'a> Index<Range<usize>> for BaseDataset<'a>{
+impl<'a> Index<Range<usize>> for BaseDataset<'a> {
     type Output = [DType];
     fn index(&self, index: Range<usize>) -> &Self::Output {
         &self.data.data.as_slice().unwrap()[index]
     }
 }
 
-impl <'a> IndexMut<Range<usize>> for BaseDataset<'a>{
+impl<'a> IndexMut<Range<usize>> for BaseDataset<'a> {
     fn index_mut(&mut self, index: Range<usize>) -> &mut Self::Output {
         &mut self.data.data.as_slice_mut().unwrap()[index]
     }
@@ -302,7 +323,11 @@ impl <'a> IndexMut<Range<usize>> for BaseDataset<'a>{
 
 impl<'a> IndexMut<String> for BaseDataset<'a> {
     fn index_mut(&mut self, index: String) -> &mut Self::Output {
-        let index = self.column_names.iter().position(|x| *x == index).expect("Element could not be found");
+        let index = self
+            .column_names
+            .iter()
+            .position(|x| *x == index)
+            .expect("Element could not be found");
         self.data
             .get_mut_col(index)
             .expect("This shouldn't be broken")
@@ -318,5 +343,3 @@ impl<'a> IndexMut<usize> for BaseDataset<'a> {
         }
     }
 }
-
-

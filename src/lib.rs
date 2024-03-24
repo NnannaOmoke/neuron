@@ -6,10 +6,7 @@ mod base_array;
 pub mod dtype;
 
 //All imports are defined here and made (pub)crate
-pub(crate) use core::{
-    num,
-    ops::Range
-};
+pub(crate) use core::{num, ops::Range};
 pub(crate) use ndarray::{
     iter::LanesIter, Array2, ArrayBase, ArrayView, Axis, Dim, Ix1, Ix2, LinalgScalar, ViewRepr,
 };
@@ -18,11 +15,11 @@ pub(crate) use std::{
     fmt::Display,
     fs::OpenOptions,
     io::BufReader,
+    iter::{zip, Zip},
     ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Sub, SubAssign},
     path::PathBuf,
+    slice::Iter,
     vec,
-    iter::{zip, Zip},
-    slice::Iter
 };
 
 // fn test_something(){
