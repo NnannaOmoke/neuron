@@ -83,7 +83,6 @@ impl BaseMatrix {
         } else {
             return Err(Error::NoData);
         };
-        dbg!("got first record");
         for field in first_record.iter() {
             let field_data = DType::parse_from_str(field, prefer_precision);
             let field_data_type = field_data.data_type();
@@ -91,9 +90,7 @@ impl BaseMatrix {
             row.push(field_data);
         }
         let mut arr = Array2::from_elem((0, row.len()), DType::None);
-        dbg!("made array");
         arr.push_row(ArrayView1::from(&row))?;
-        dbg!("pushed first row");
         for record_res in records {
             let record = record_res?;
             for (i, field) in record.into_iter().enumerate() {
@@ -112,7 +109,6 @@ impl BaseMatrix {
                 }
             }
             arr.push_row(ArrayView1::from(&row))?;
-            dbg!("pushed row");
         }
 
         Ok(BaseMatrix { data: arr })
