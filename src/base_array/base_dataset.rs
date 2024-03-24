@@ -1,10 +1,9 @@
 use std::sync::RwLock;
 
-use ndarray::IndexLonger;
-
 use super::*;
 use crate::dtype::{self, DType, DTypeType};
-use std::io::Read;
+use ndarray::IndexLonger;
+use std::{borrow::Cow, io::Read};
 
 //this will be the dataset visible to the external users
 //we'll implement quite the number of methods for this, hopefully
@@ -12,16 +11,20 @@ use std::io::Read;
 #[derive(Clone)]
 pub(crate) struct BaseDataset<'a> {
     data: BaseMatrix,
-    column_names: Vec<String>,
-    std: Option<&'a [DType]>,
-    mean: Option<&'a [DType]>,
-    mode: Option<&'a [DType]>,
-    median: Option<&'a [DType]>,
-    percentiles: Option<&'a [&'a [DType]]>, //we should put in a vec?
+    column_names: Cow<'a, [Cow<'a, str>]>,
+    std: Option<Vec<DType>>,
+    mean: Option<Vec<DType>>,
+    mode: Option<Vec<DType>>,
+    median: Option<Vec<DType>>,
+    percentiles: Option<BaseMatrix>, // Is this inappropriate?
 }
 
 impl<'a> BaseDataset<'a> {
-    pub fn from_matrix(data: BaseMatrix, compute_on_creation: bool, colnames: Vec<String>) -> Self {
+    pub fn from_matrix(
+        data: BaseMatrix,
+        compute_on_creation: bool,
+        colnames: Cow<'a, [Cow<'a, str>]>,
+    ) -> BaseDataset<'a> {
         if compute_on_creation {
             todo!()
         }
@@ -41,8 +44,8 @@ impl<'a> BaseDataset<'a> {
         reader: csv::Reader<R>,
         prefer_precision: bool,
         compute_on_creation: bool,
-        colnames: Vec<String>,
-    ) -> Result<Self, super::Error> {
+        colnames: Cow<'a, [Cow<'a, str>]>,
+    ) -> Result<BaseDataset<'a>, super::Error> {
         Ok(BaseDataset::from_matrix(
             BaseMatrix::try_from_csv(reader, prefer_precision)?,
             compute_on_creation,
@@ -69,7 +72,7 @@ impl<'a> BaseDataset<'a> {
     }
 
     //returns the colum names of the basedataset
-    pub fn columns(&self) -> Vec<String> {
+    pub fn columns(&'a self) -> Cow<'a, [Cow<'a, str>]> {
         self.column_names.clone()
     }
     //this can get a little tricky, but basically we're assuming this
@@ -186,7 +189,11 @@ impl<'a> BaseDataset<'a> {
     }
     //returns the first n rows in the dataframe (usually this should be printed out as a table)
     pub fn head(&self, n: Option<usize>) {
-        let headers = &self.column_names;
+        let headers = self
+            .column_names
+            .iter()
+            .map(|name_cow| name_cow.clone().into_owned())
+            .collect::<Vec<_>>();
         let data: Vec<Vec<DType>> = self
             .data
             .rows()
@@ -224,13 +231,13 @@ impl<'a> BaseDataset<'a> {
         *prev = new_point;
     }
     //add a column to the data
-    pub fn push_col(&mut self, colname: String, slice: &[DType]) {
-        self.column_names.push(colname);
+    pub fn push_col(&mut self, colname: Cow<'a, str>, slice: &[DType]) {
+        self.column_names.to_mut().push(colname);
         self.data.push_col(slice)
     }
     //iterator over column name, data pairs
-    pub fn items(&mut self) -> Zip<Iter<String>, base_array::ColumnIter<'_>> {
-        zip(&self.column_names, self.data.cols())
+    pub fn items<'s>(&'s mut self) -> Zip<Iter<Cow<'s, str>>, base_array::ColumnIter<'s>> {
+        zip(self.column_names.iter(), self.data.cols())
     }
     //iterator over row-index, data pairs
     //note that indexes are movable, for now
