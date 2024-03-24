@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod base_matrix_tests;
+
 mod base_dataset;
 
 use crate::{
@@ -72,22 +75,25 @@ impl BaseMatrix {
     ) -> Result<Self, Error> {
         // The nice thing about this code is that we don't have to check col sizes; `csv` does this
         // automatically.
-        let mut arr = Array2::from_elem((0, 0), DType::None);
         let mut col_types = Vec::new();
         let mut row = Vec::new();
         let mut records = reader.into_records();
         let first_record = if let Some(rr) = records.next() {
             rr?
         } else {
-            return Ok(BaseMatrix { data: arr });
+            return Err(Error::NoData);
         };
+        dbg!("got first record");
         for field in first_record.iter() {
             let field_data = DType::parse_from_str(field, prefer_precision);
             let field_data_type = field_data.data_type();
             col_types.push(field_data_type);
             row.push(field_data);
         }
+        let mut arr = Array2::from_elem((0, row.len()), DType::None);
+        dbg!("made array");
         arr.push_row(ArrayView1::from(&row))?;
+        dbg!("pushed first row");
         for record_res in records {
             let record = record_res?;
             for (i, field) in record.into_iter().enumerate() {
@@ -106,6 +112,7 @@ impl BaseMatrix {
                 }
             }
             arr.push_row(ArrayView1::from(&row))?;
+            dbg!("pushed row");
         }
 
         Ok(BaseMatrix { data: arr })
@@ -177,13 +184,15 @@ impl Mul<BaseMatrix> for BaseMatrix {
 
 #[derive(Debug, Error)]
 pub(crate) enum Error {
+    #[error(transparent)]
+    CsvError(#[from] csv::Error),
     #[error("columns of matrix were not all of same data type")]
     MismatchedDTypes {
         expected_data_type: DTypeType,
         found_data_type: DTypeType,
     },
-    #[error(transparent)]
-    CsvError(#[from] csv::Error),
+    #[error("Matrix or source of data was empty")]
+    NoData,
     #[error(transparent)]
     ShapeError(#[from] ShapeError),
 }
