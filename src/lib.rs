@@ -2,7 +2,7 @@
 #![allow(non_camel_case_types)]
 #![allow(unused_imports)]
 
-mod base_array;
+pub mod base_array;
 pub mod dtype;
 
 //All imports are defined here and made (pub)crate

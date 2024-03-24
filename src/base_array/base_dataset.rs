@@ -1,4 +1,4 @@
-use std::sync::RwLock;
+use std::{sync::RwLock, path::Path};
 
 use super::*;
 use crate::dtype::{self, DType, DTypeType};
@@ -349,4 +349,12 @@ impl<'a> IndexMut<usize> for BaseDataset<'a> {
             None => panic!("Invalid index"),
         }
     }
+}
+
+pub fn test_csv(){
+    let fpath = Path::new("test.csv");
+    let csv_reader = csv::ReaderBuilder::new().delimiter(b',').from_path(fpath).unwrap();
+    let data = BaseDataset::try_from_csv_reader(csv_reader, false, false, Cow::Borrowed(&[Cow::Borrowed("name"), Cow::Borrowed("age"), Cow::Borrowed("gender"), Cow::Borrowed("weight")]));
+    let data = data.unwrap();
+    data.head(Some(2));
 }
