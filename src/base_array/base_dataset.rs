@@ -337,7 +337,9 @@ impl<'a> BaseDataset<'a> {
 // impl<'a> IndexMut<usize> for BaseDataset<'a> {
 //     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
 //         //this should return a row, no?
-//         self.data.get_mut_row(index).as_slice_mut().unwrap()
+//         match self.data.get_mut_row(index) {
+//             Some(slice) => slice,
+//             None => panic!("Invalid index"),
+//         }
 //     }
 // }
-

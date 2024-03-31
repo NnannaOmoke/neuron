@@ -84,7 +84,7 @@ impl BaseMatrix {
             return Err(Error::NoData);
         };
         for field in first_record.iter() {
-            let field_data = DType::parse_from_str(field, prefer_precision);
+            let field_data = DType::parse_from_str(field.trim(), prefer_precision);
             let field_data_type = field_data.data_type();
             col_types.push(field_data_type);
             row.push(field_data);
@@ -94,7 +94,7 @@ impl BaseMatrix {
         for record_res in records {
             let record = record_res?;
             for (i, field) in record.into_iter().enumerate() {
-                let dtype = DType::parse_from_str(field, prefer_precision);
+                let dtype = DType::parse_from_str(field.trim(), prefer_precision);
                 // SAFETY: If the record we got had a different number of fields, the read method would
                 // have failed based on the way the csv Reader works.
                 let expected_data_type = row[i].data_type();
