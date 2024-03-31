@@ -9,6 +9,8 @@ use core::{
 use std::mem;
 use thiserror::Error;
 
+const ERR_MSG_INCOMPAT_TYPES: &'static str = "Attempt to perform numeric operation on imcompatible types!";
+
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum DType {
     None,
@@ -72,6 +74,7 @@ impl DType {
         DTypeType::from(self)
     }
 
+    #[inline]
     pub fn type_size(&self) -> usize {
         match self {
             DType::None => mem::size_of::<DType>(),
@@ -124,6 +127,55 @@ impl DType {
     }
 }
 
+impl Add<DType> for DType {
+    type Output = DType;
+
+    fn add(self, rhs: DType) -> Self::Output {
+        use DType::*;
+
+        match self {
+            // There has got to be a better way.
+            None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            U32(l) => match rhs {
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+                U32(r) => U32(l + r),
+                U64(r) => U64(l as u64 + r),
+                F32(r) => F32(l as f32 + r),
+                F64(r) => F64(l as f64 + r),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            },
+            U64(l) => match rhs {
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+                U32(r) => U64(l + r as u64),
+                U64(r) => U64(l + r),
+                F32(r) => F32(l as f32 + r),
+                F64(r) => F64(l as f64 + r),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            },
+            F32(l) => match rhs {
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+                U32(r) => F32(l + r as f32),
+                U64(r) => F32(l + r as f32),
+                F32(r) => F32(l + r),
+                F64(r) => F64(l as f64 + r),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            },
+            F64(l) => match rhs {
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+                U32(r) => F64(l + r as f64),
+                U64(r) => F64(l + r as f64),
+                F32(r) => F64(l + r as f64),
+                F64(r) => F64(l + r),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            },
+            Object(l) => match rhs {
+                Object(r) => Object(l + &r),
+                _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            },
+        }
+    }
+}
+
 impl Add<&DType> for DType {
     type Output = DType;
 
@@ -132,42 +184,42 @@ impl Add<&DType> for DType {
 
         match self {
             // There has got to be a better way.
-            None => rhs.clone(),
+            None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             U32(l) => match rhs {
-                None => U32(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U32(l + r),
                 U64(r) => U64(l as u64 + r),
                 F32(r) => F32(l as f32 + r),
                 F64(r) => F64(l as f64 + r),
-                Object(_) => U32(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             U64(l) => match rhs {
-                None => U64(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U64(l + *r as u64),
                 U64(r) => U64(l + r),
                 F32(r) => F32(l as f32 + r),
                 F64(r) => F64(l as f64 + r),
-                Object(_) => U64(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F32(l) => match rhs {
-                None => F32(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F32(l + *r as f32),
                 U64(r) => F32(l + *r as f32),
                 F32(r) => F32(l + r),
                 F64(r) => F64(l as f64 + r),
-                Object(_) => F32(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F64(l) => match rhs {
-                None => F64(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F64(l + *r as f64),
                 U64(r) => F64(l + *r as f64),
                 F32(r) => F64(l + *r as f64),
                 F64(r) => F64(l + r),
-                Object(_) => F64(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             Object(l) => match rhs {
                 Object(r) => Object(l + r),
-                _ => Object(l),
+                _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
         }
     }
@@ -180,42 +232,42 @@ impl Add<&DType> for &DType {
         use DType::*;
 
         match self {
-            None => rhs.clone(),
+            None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             U32(l) => match rhs {
-                None => U32(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U32(l + r),
                 U64(r) => U64(*l as u64 + r),
                 F32(r) => F32(*l as f32 + r),
                 F64(r) => F64(*l as f64 + r),
-                Object(_) => U32(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             U64(l) => match rhs {
-                None => U64(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U64(l + *r as u64),
                 U64(r) => U64(l + r),
                 F32(r) => F32(*l as f32 + r),
                 F64(r) => F64(*l as f64 + r),
-                Object(_) => U64(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F32(l) => match rhs {
-                None => F32(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F32(l + *r as f32),
                 U64(r) => F32(l + *r as f32),
                 F32(r) => F32(l + r),
                 F64(r) => F64(*l as f64 + r),
-                Object(_) => F32(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F64(l) => match rhs {
-                None => F64(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F64(l + *r as f64),
                 U64(r) => F64(l + *r as f64),
                 F32(r) => F64(l + *r as f64),
                 F64(r) => F64(l + r),
-                Object(_) => F64(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             Object(l) => match rhs {
                 Object(r) => Object(l.clone() + r),
-                _ => Object(l.clone()),
+                _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
         }
     }
@@ -230,36 +282,36 @@ impl Sub<&DType> for DType {
         match self {
             None => self,
             U32(l) => match rhs {
-                None => U32(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U32(l - r),
                 U64(r) => U64(l as u64 - r),
                 F32(r) => F32(l as f32 - r),
                 F64(r) => F64(l as f64 - r),
-                Object(_) => U32(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             U64(l) => match rhs {
-                None => U64(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U64(l - *r as u64),
                 U64(r) => U64(l - r),
                 F32(r) => F32(l as f32 - r),
                 F64(r) => F64(l as f64 - r),
-                Object(_) => U64(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F32(l) => match rhs {
-                None => F32(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F32(l - *r as f32),
                 U64(r) => F32(l - *r as f32),
                 F32(r) => F32(l - r),
                 F64(r) => F64(l as f64 - r),
-                Object(_) => F32(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F64(l) => match rhs {
-                None => F64(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F64(l - *r as f64),
                 U64(r) => F64(l - *r as f64),
                 F32(r) => F64(l - *r as f64),
                 F64(r) => F64(l - r),
-                Object(_) => F64(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             Object(l) => Object(l),
         }
@@ -273,38 +325,38 @@ impl Sub<&DType> for &DType {
         use DType::*;
 
         match self {
-            None => None,
+            None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             U32(l) => match rhs {
-                None => U32(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U32(l - r),
                 U64(r) => U64(*l as u64 - r),
                 F32(r) => F32(*l as f32 - r),
                 F64(r) => F64(*l as f64 - r),
-                Object(_) => U32(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             U64(l) => match rhs {
-                None => U64(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U64(l - *r as u64),
                 U64(r) => U64(l - r),
                 F32(r) => F32(*l as f32 - r),
                 F64(r) => F64(*l as f64 - r),
-                Object(_) => U64(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F32(l) => match rhs {
-                None => F32(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F32(l - *r as f32),
                 U64(r) => F32(l - *r as f32),
                 F32(r) => F32(l - r),
                 F64(r) => F64(*l as f64 - r),
-                Object(_) => F32(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F64(l) => match rhs {
-                None => F64(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F64(l - *r as f64),
                 U64(r) => F64(l - *r as f64),
                 F32(r) => F64(l - *r as f64),
                 F64(r) => F64(l - r),
-                Object(_) => F64(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             Object(l) => Object(l.clone()),
         }
@@ -318,42 +370,42 @@ impl Mul<&DType> for DType {
         use DType::*;
 
         match self {
-            None => rhs.clone(),
+            None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             U32(l) => match rhs {
-                None => U32(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U32(l * r),
                 U64(r) => U64(l as u64 * r),
                 F32(r) => F32(l as f32 * r),
                 F64(r) => F64(l as f64 * r),
-                Object(_) => U32(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             U64(l) => match rhs {
-                None => U64(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U64(l * *r as u64),
                 U64(r) => U64(l * r),
                 F32(r) => F32(l as f32 * r),
                 F64(r) => F64(l as f64 * r),
-                Object(_) => U64(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F32(l) => match rhs {
-                None => F32(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F32(l * *r as f32),
                 U64(r) => F32(l * *r as f32),
                 F32(r) => F32(l * r),
                 F64(r) => F64(l as f64 * r),
-                Object(_) => F32(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F64(l) => match rhs {
-                None => F64(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F64(l * *r as f64),
                 U64(r) => F64(l * *r as f64),
                 F32(r) => F64(l * *r as f64),
                 F64(r) => F64(l * r),
-                Object(_) => F64(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             Object(l) => match rhs {
                 Object(r) => Object(l + r),
-                _ => Object(l),
+                _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
         }
     }
@@ -366,42 +418,42 @@ impl Mul<&DType> for &DType {
         use DType::*;
 
         match self {
-            None => rhs.clone(),
+            None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             U32(l) => match rhs {
-                None => U32(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U32(l * r),
                 U64(r) => U64(*l as u64 * r),
                 F32(r) => F32(*l as f32 * r),
                 F64(r) => F64(*l as f64 * r),
-                Object(_) => U32(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             U64(l) => match rhs {
-                None => U64(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U64(l * *r as u64),
                 U64(r) => U64(l * r),
                 F32(r) => F32(*l as f32 * r),
                 F64(r) => F64(*l as f64 * r),
-                Object(_) => U64(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F32(l) => match rhs {
-                None => F32(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F32(l * *r as f32),
                 U64(r) => F32(l * *r as f32),
                 F32(r) => F32(l * r),
                 F64(r) => F64(*l as f64 * r),
-                Object(_) => F32(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F64(l) => match rhs {
-                None => F64(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F64(l * *r as f64),
                 U64(r) => F64(l * *r as f64),
                 F32(r) => F64(l * *r as f64),
                 F64(r) => F64(l * r),
-                Object(_) => F64(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             Object(l) => match rhs {
                 Object(r) => Object(l.clone() + r),
-                _ => Object(l.clone()),
+                _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
         }
     }
@@ -414,43 +466,90 @@ impl Div<&DType> for DType {
         use DType::*;
 
         match self {
-            None => self,
+            None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             U32(l) => match rhs {
-                None => U32(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U32(l / r),
                 U64(r) => U64(l as u64 / r),
                 F32(r) => F32(l as f32 / r),
                 F64(r) => F64(l as f64 / r),
-                Object(_) => U32(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             U64(l) => match rhs {
-                None => U64(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U64(l / *r as u64),
                 U64(r) => U64(l / r),
                 F32(r) => F32(l as f32 / r),
                 F64(r) => F64(l as f64 / r),
-                Object(_) => U64(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F32(l) => match rhs {
-                None => F32(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F32(l / *r as f32),
                 U64(r) => F32(l / *r as f32),
                 F32(r) => F32(l / r),
                 F64(r) => F64(l as f64 / r),
-                Object(_) => F32(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F64(l) => match rhs {
-                None => F64(l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F64(l / *r as f64),
                 U64(r) => F64(l / *r as f64),
                 F32(r) => F64(l / *r as f64),
                 F64(r) => F64(l / r),
-                Object(_) => F64(l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             Object(l) => Object(l),
         }
     }
 }
+
+impl Div<DType> for DType {
+    type Output = DType;
+
+    fn div(self, rhs: DType) -> Self::Output {
+        use DType::*;
+
+        match self {
+            None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            U32(l) => match rhs {
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+                U32(r) => U32(l / r),
+                U64(r) => U64(l as u64 / r),
+                F32(r) => F32(l as f32 / r),
+                F64(r) => F64(l as f64 / r),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            },
+            U64(l) => match rhs {
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+                U32(r) => U64(l / r as u64),
+                U64(r) => U64(l / r),
+                F32(r) => F32(l as f32 / r),
+                F64(r) => F64(l as f64 / r),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            },
+            F32(l) => match rhs {
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+                U32(r) => F32(l / r as f32),
+                U64(r) => F32(l / r as f32),
+                F32(r) => F32(l / r),
+                F64(r) => F64(l as f64 / r),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            },
+            F64(l) => match rhs {
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+                U32(r) => F64(l / r as f64),
+                U64(r) => F64(l / r as f64),
+                F32(r) => F64(l / r as f64),
+                F64(r) => F64(l / r),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            },
+            Object(l) => Object(l),
+        }
+    }
+}
+
+
 
 impl Div<&DType> for &DType {
     type Output = DType;
@@ -459,40 +558,40 @@ impl Div<&DType> for &DType {
         use DType::*;
 
         match self {
-            None => None,
+            None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             U32(l) => match rhs {
-                None => U32(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U32(l / r),
                 U64(r) => U64(*l as u64 / r),
                 F32(r) => F32(*l as f32 / r),
                 F64(r) => F64(*l as f64 / r),
-                Object(_) => U32(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             U64(l) => match rhs {
-                None => U64(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => U64(l / *r as u64),
                 U64(r) => U64(l / r),
                 F32(r) => F32(*l as f32 / r),
                 F64(r) => F64(*l as f64 / r),
-                Object(_) => U64(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F32(l) => match rhs {
-                None => F32(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F32(l / *r as f32),
                 U64(r) => F32(l / *r as f32),
                 F32(r) => F32(l / r),
                 F64(r) => F64(*l as f64 / r),
-                Object(_) => F32(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             F64(l) => match rhs {
-                None => F64(*l),
+                None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
                 U32(r) => F64(l / *r as f64),
                 U64(r) => F64(l / *r as f64),
                 F32(r) => F64(l / *r as f64),
                 F64(r) => F64(l / r),
-                Object(_) => F64(*l),
+                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
-            Object(l) => Object(l.clone()),
+            Object(l) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
         }
     }
 }
@@ -615,6 +714,84 @@ impl Display for DType {
         }
     }
 }
+
+impl From<u32> for DType{
+    fn from(value: u32) -> Self {
+        DType::U32(value)
+    }
+}
+
+impl From<u64> for DType{
+    fn from(value: u64) -> Self {
+        DType::U64(value)
+    }
+}
+
+impl From<f32> for DType{
+    fn from(value: f32) -> Self {
+        if value.is_nan() | value.is_infinite() | value.is_subnormal(){
+            return DType::None
+       }
+       DType::F32(value)
+    }
+}
+
+impl From<f64> for DType{
+    fn from(value: f64) -> Self {
+       if value.is_nan() | value.is_infinite() | value.is_subnormal(){
+            return DType::None
+       }
+       DType::F64(value)
+    }
+}
+
+impl From<usize> for DType{
+    #[cfg(target_pointer_width = "16")]
+    fn from(value: usize) -> Self {
+        DType::U32(value as u32)
+    }
+
+    #[cfg(target_pointer_width = "32")]
+    fn from(value: usize) -> Self {
+        DType::U32(value)
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    fn from(value: usize) -> Self {
+        DType::U64(value as u64) //should fit perfectly
+    }
+}
+
+impl From<String> for DType{
+    fn from(value: String) -> Self {
+        DType::Object(value)
+    }
+}
+
+impl From<&str> for DType{
+    fn from(value: &str) -> Self {
+        DType::Object(value.to_string())
+    }
+}
+
+impl Zero for DType{
+    fn is_zero(&self) -> bool {
+        match self{
+            DType::None => false,
+            DType::F32(val) => *val == 0f32,
+            DType::F64(val) => *val == 0f64,
+            DType::U32(val) => *val == 0,
+            DType::U64(val) => *val == 0,
+            DType::Object(_) => false
+        }
+    }
+
+    fn zero() -> Self {
+        0f64.into()
+    }
+}
+
+
 
 #[derive(Debug, Error)]
 pub enum Error {

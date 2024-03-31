@@ -19,7 +19,6 @@ pub(crate) struct BaseMatrix {
 
 impl BaseMatrix {
     //add some functionality to build from csv later
-
     pub(crate) fn transpose(self) -> Self {
         BaseMatrix {
             data: self.data.reversed_axes(),
@@ -68,7 +67,6 @@ impl BaseMatrix {
             inner: self.data.rows().into_iter(),
         }
     }
-
     pub(crate) fn try_from_csv<R: Read>(
         reader: csv::Reader<R>,
         prefer_precision: bool,
@@ -110,11 +108,9 @@ impl BaseMatrix {
             }
             arr.push_row(ArrayView1::from(&row))?;
         }
-
         Ok(BaseMatrix { data: arr })
     }
 }
-
 //@ViableCompute, I want you to implement std::ops::traits for BaseMatrix [add, sub, mult(dot and element wise), div, index(use the get() function)]. When we're done with that we'll write a more userfriendly API that will
 //be visible for our users, similar to pandas dataframe
 impl AddAssign<&BaseMatrix> for BaseMatrix {
@@ -130,7 +126,6 @@ impl Add<BaseMatrix> for BaseMatrix {
         rhs
     }
 }
-
 impl SubAssign<BaseMatrix> for BaseMatrix {
     fn sub_assign(&mut self, rhs: BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());

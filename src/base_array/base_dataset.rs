@@ -20,16 +20,12 @@ impl<'a> BaseDataset<'a> {
         compute_on_creation: bool,
         colnames: Cow<'a, [Cow<'a, str>]>,
     ) -> BaseDataset<'a> {
-        if compute_on_creation {
-            todo!()
-        }
         Self {
             data,
             column_names: colnames,
         }
     }
     //we'll have to define a lot more convenience methods for instantiating this, however
-
     pub fn try_from_csv_reader<R: Read>(
         reader: csv::Reader<R>,
         prefer_precision: bool,
@@ -42,7 +38,6 @@ impl<'a> BaseDataset<'a> {
             colnames,
         ))
     }
-
     //iterator over columns 
     pub fn cols(&self) -> ColumnIter<'_>{
         self.data.cols()
@@ -77,7 +72,6 @@ impl<'a> BaseDataset<'a> {
         self.data.get_mut_row(cindex)
         // Recalculate cached values
     }
-
     //returns the colum names of the basedataset
     pub fn columns(&'a self) -> Cow<'a, [Cow<'a, str>]> {
         self.column_names.clone()
@@ -103,7 +97,6 @@ impl<'a> BaseDataset<'a> {
     pub fn memory_usage(&self) -> Vec<usize> {
         let mut return_val = Vec::new();
         let (num_cols, num_rows) = self.data.shape();
-
         //couldnt find the colunm iterator
         for col_index in 0..num_cols {
             let col = self.data.get_col(col_index);
@@ -130,7 +123,6 @@ impl<'a> BaseDataset<'a> {
     pub fn total_memory_usage(&self) -> usize {
         let mut return_val = 0usize;
         let (num_cols, num_rows) = self.data.shape();
-
         if num_rows != 0 {
             for col_index in 0..num_cols {
                 let col = self.data.get_col(col_index);
@@ -159,7 +151,8 @@ impl<'a> BaseDataset<'a> {
         todo!()
     }
     //returns the number of dimensions of the dataset
-    pub fn ndim(&self) -> usize {
+    #[inline]
+    pub const fn ndim(&self) -> usize {
         2
     }
     //returns the number of elements in this dataset
@@ -203,7 +196,7 @@ impl<'a> BaseDataset<'a> {
         }
         prettytable.printstd();
     }
-
+    //returns the last elements in the dataset
     pub fn tail(&self, n: Option<usize>) -> () {
         let _headers = &self.column_names;
         //we need to implement the double ended iterator trait for BaseMatrix for a more efficient implementation of this
@@ -218,7 +211,6 @@ impl<'a> BaseDataset<'a> {
                 .get(rindex, self._get_string_index(&colname.unwrap()))
         )
     }
-
     //modify the data at a single point
     pub fn modify_point_(&mut self, rindex: usize, colname: Option<String>, new_point: DType) {
         let index = self._get_string_index(&colname.unwrap_or_default());
@@ -280,7 +272,36 @@ impl<'a> BaseDataset<'a> {
             col.iter_mut().for_each(|x| DType::abs(x))
         }
     }
-    
+    //clips the values in a column between certain values
+    pub fn clip(&mut self, colname: String, upper: DType, lower: DType){
+        let col_index = self._get_string_index(&colname);
+        for elem in self.get_col_mut(col_index){
+            if *elem > upper{
+                *elem  = upper.clone();
+            }
+            if *elem < lower{
+                *elem = lower.clone();
+            }
+        }
+    }
+    //get the number of non null elements in the column
+    pub fn count(&self, colname: &String) -> usize{
+        let col_index = self._get_string_index(colname);
+        self.get_col(col_index).iter().filter(|x| match x{DType::None => false, _ => true}).count()
+    }
+    //get the mean of a column
+    pub fn mean(&self, colname: &String) -> DType{
+        let col_index = self._get_string_index(colname);
+        let sum = self.get_col(col_index).sum();
+        let len: DType = (self.len() as f32).into();
+        sum/len
+    }
+
+    pub fn median(&self, colname: &String) -> DType{
+        let col_index = self._get_string_index(colname);
+        todo!()
+    }
+    //number of rows in the dataset
     pub fn len(&self) -> usize{
         self.data.len()
     }

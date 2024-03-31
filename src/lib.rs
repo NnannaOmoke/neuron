@@ -10,6 +10,7 @@ pub(crate) use core::{num, ops::Range};
 pub(crate) use ndarray::{
     iter::LanesIter, Array2, ArrayBase, ArrayView, Axis, Dim, Ix1, Ix2, LinalgScalar, ViewRepr,
 };
+pub(crate) use num_traits::{Zero, FromPrimitive};
 pub(crate) use std::{
     collections::HashMap,
     fmt::Display,
