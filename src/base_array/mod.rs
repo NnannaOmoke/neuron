@@ -7,7 +7,7 @@ use crate::{
     dtype::{self, DType, DTypeType},
     *,
 };
-use ndarray::{ArrayView1, ShapeError};
+use ndarray::{ArrayView1, ShapeError, ArrayViewMut1};
 use std::io::Read;
 use thiserror::Error;
 
@@ -29,17 +29,17 @@ impl BaseMatrix {
         assert!(self.data.shape().len() == 2);
         (self.data.nrows(), self.data.ncols())
     }
-    pub(crate) fn get_col(&self, cindex: usize) -> Option<&[DType]> {
-        self.data.column(cindex).to_slice()
+    pub(crate) fn get_col(&self, cindex: usize) -> ArrayView1<'_, DType> {
+        self.data.column(cindex)
     }
-    pub(crate) fn get_mut_col(&mut self, cindex: usize) -> Option<&mut [DType]> {
-        self.data.column_mut(cindex).into_slice()
+    pub(crate) fn get_mut_col(&mut self, cindex: usize) -> ArrayViewMut1<'_, DType> {
+        self.data.column_mut(cindex)
     }
-    pub(crate) fn get_row(&self, rindex: usize) -> Option<&[DType]> {
-        self.data.row(rindex).to_slice()
+    pub(crate) fn get_row(&self, rindex: usize) -> ArrayView1<'_, DType> {
+        self.data.row(rindex)
     }
-    pub(crate) fn get_mut_row(&mut self, rindex: usize) -> Option<&mut [DType]> {
-        self.data.row_mut(rindex).into_slice()
+    pub(crate) fn get_mut_row(&mut self, rindex: usize) -> ArrayViewMut1<'_, DType> {
+        self.data.row_mut(rindex)
     }
     pub(crate) fn get(&self, rindex: usize, cindex: usize) -> &DType {
         self.data.get((rindex, cindex)).unwrap()
@@ -148,7 +148,7 @@ impl SubAssign<&BaseMatrix> for BaseMatrix {
 impl Index<usize> for BaseMatrix {
     type Output = [DType];
     fn index(&self, index: usize) -> &Self::Output {
-        self.get_row(index).unwrap()
+        &self[index] //this is row major, apparently, so this returns a row, I think
     }
 }
 

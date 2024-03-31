@@ -75,11 +75,11 @@ impl DType {
     pub fn type_size(&self) -> usize {
         match self {
             DType::None => mem::size_of::<DType>(),
-            DType::F32(_) => 4,
-            DType::F64(_) => 8,
-            DType::U32(_) => 4,
-            DType::U64(_) => 8,
-            DType::Object(data) => data.len(),
+            DType::F32(_) => mem::size_of::<DType>() + 4,
+            DType::F64(_) => mem::size_of::<DType>() + 8,
+            DType::U32(_) => mem::size_of::<DType>() + 4,
+            DType::U64(_) => mem::size_of::<DType>() + 8,
+            DType::Object(data) => mem::size_of::<DType>() + data.len(),
         }
     }
 
