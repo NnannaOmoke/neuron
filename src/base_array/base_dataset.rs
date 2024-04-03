@@ -1,9 +1,9 @@
-use std::{sync::RwLock, path::Path};
+use std::{sync::RwLock, path::Path, collections::HashSet};
 
 use super::*;
 use crate::dtype::{self, DType, DTypeType};
 use ndarray::{IndexLonger, iter::{Axes, Indices, LanesMut}, s};
-use std::{borrow::Cow, io::Read};
+use std::{borrow::Cow, io::Read, mem::transmute};
 
 //this will be the dataset visible to the external users
 //we'll implement quite the number of methods for this, hopefully
@@ -296,11 +296,61 @@ impl<'a> BaseDataset<'a> {
         let len: DType = (self.len() as f32).into();
         sum/len
     }
-
+    //get the median value of a column.
+    //fuck this can be hard
     pub fn median(&self, colname: &String) -> DType{
+        let col_index = self._get_string_index(colname);
+        let mut deepcopy = self.get_col(col_index).clone().to_vec();
+        deepcopy.sort();
+        deepcopy[self.len()/2].clone()
+    }
+    //get the mode of the column, i.e. most occuring element
+    pub fn mode(&self, colname: &String) -> DType{
         let col_index = self._get_string_index(colname);
         todo!()
     }
+    //smallest element in the column
+    pub fn min(&self, colname: &String) -> DType{
+        let col_index = self._get_string_index(colname);
+        self.get_col(col_index).iter().min().expect("Empty Column").clone()
+    }
+    //largest element in the column
+    pub fn max(&self, colname: &String) -> DType{
+        let col_index = self._get_string_index(colname);
+        self.get_col(col_index).iter().max().expect("Empty Column").clone()
+    }
+    //find the product of all the elements in the column
+    pub fn product(&self, colname: &String) -> DType{
+        let col_index = self._get_string_index(colname);
+        self.get_col(col_index).iter().fold(1u32.into(), |x: DType, y| x * y).clone()
+    }
+    //find an element at a particular quantile
+    pub fn quantile(&self, colname: &String, quantile: f32) -> DType{
+        let quantile = (quantile * (self.len() as f32)) as usize;
+        let col_index = self._get_string_index(colname);
+        let mut deepcopy = self.get_col(col_index).clone().to_vec();
+        deepcopy.sort();
+        deepcopy[quantile].clone()
+    }
+    pub fn sum(&self, colname: &String) -> DType{
+        let col_index = self._get_string_index(colname);
+        self.get_col(col_index).sum()
+    }
+    pub fn std(&self, colname: &String) -> DType{
+        todo!()
+    }
+    pub fn variance(&self, colname: &String) -> DType{
+        //std^2
+        todo!()
+    }
+    pub fn non_unique(&self, colname: &String) -> DType{
+        let col_index = self._get_string_index(colname);
+        //let set: HashSet<&DType> = self.get_col(col_index).iter().collect();
+        DType::None
+    }
+    
+
+    
     //number of rows in the dataset
     pub fn len(&self) -> usize{
         self.data.len()

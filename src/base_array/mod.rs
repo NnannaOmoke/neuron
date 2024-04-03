@@ -111,8 +111,8 @@ impl BaseMatrix {
         Ok(BaseMatrix { data: arr })
     }
 }
-//@ViableCompute, I want you to implement std::ops::traits for BaseMatrix [add, sub, mult(dot and element wise), div, index(use the get() function)]. When we're done with that we'll write a more userfriendly API that will
-//be visible for our users, similar to pandas dataframe
+
+
 impl AddAssign<&BaseMatrix> for BaseMatrix {
     fn add_assign(&mut self, rhs: &BaseMatrix) {
         assert_eq!(self.shape(), rhs.shape());

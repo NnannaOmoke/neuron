@@ -1,4 +1,5 @@
 use micromath::F32;
+use num_traits::{NumCast, ToPrimitive};
 
 use crate::*;
 use core::{
@@ -6,12 +7,13 @@ use core::{
     num::{ParseFloatError, ParseIntError},
     str::FromStr,
 };
-use std::mem;
+use float_derive_macros::FloatEq;
+use std::{mem, ops::Neg};
 use thiserror::Error;
 
 const ERR_MSG_INCOMPAT_TYPES: &'static str = "Attempt to perform numeric operation on imcompatible types!";
 
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, PartialOrd, Clone, FloatEq)]
 pub enum DType {
     None,
     U32(u32),
@@ -77,11 +79,11 @@ impl DType {
     #[inline]
     pub fn type_size(&self) -> usize {
         match self {
-            DType::None => mem::size_of::<DType>(),
-            DType::F32(_) => mem::size_of::<DType>() + 4,
-            DType::F64(_) => mem::size_of::<DType>() + 8,
-            DType::U32(_) => mem::size_of::<DType>() + 4,
-            DType::U64(_) => mem::size_of::<DType>() + 8,
+            DType::None => 1,
+            DType::F32(_) => mem::size_of::<DType>()                                                                   ,
+            DType::F64(_) => mem::size_of::<DType>(),
+            DType::U32(_) => mem::size_of::<DType>(),
+            DType::U64(_) => mem::size_of::<DType>(),
             DType::Object(data) => mem::size_of::<DType>() + data.len(),
         }
     }
@@ -658,7 +660,7 @@ impl MulAssign<DType> for DType {
             }
             // else, no change
         } else {
-            *self = &*self * &rhs;
+            *self = unsafe{(self as *const DType).as_ref().unwrap().clone() * &rhs}
         }
     }
 }
@@ -703,8 +705,6 @@ impl DivAssign<&DType> for DType {
 impl Display for DType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            //maybe i was a little too hasty with this...
-            //ugh i'll have to manually do this there, then
             DType::None => write!(f, "NAN"),
             DType::F32(val_) => write!(f, "{val_}"),
             DType::F64(val_) => write!(f, "{val_}"),
@@ -774,6 +774,7 @@ impl From<&str> for DType{
     }
 }
 
+
 impl Zero for DType{
     fn is_zero(&self) -> bool {
         match self{
@@ -792,6 +793,26 @@ impl Zero for DType{
 }
 
 
+
+impl Neg for DType{
+    type Output = DType;
+    fn neg(self) -> Self::Output {
+        match self {
+            DType::None => DType::None, 
+            DType::F32(var) => DType::F32(-var),
+            DType::F64(var) => DType::F64(-var),
+            DType::U32(var) => DType::F32(-(var as f32)),
+            DType::U64(var) => DType::F64(-(var as f64)),
+            _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES)
+        }
+    }
+}
+
+impl Ord for DType{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        todo!()
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum Error {
