@@ -54,6 +54,9 @@ impl BaseMatrix {
             .push_column(slice.into())
             .expect("Shape is not compatible")
     }
+    pub(crate) fn push_row(&mut self, slice: &[DType]){
+        self.data.push_row(slice.into()).expect("Incompatible shapes!")
+    }
     pub(crate) fn pop_col(&mut self) -> &[DType] {
         todo!()
     }

@@ -343,14 +343,45 @@ impl<'a> BaseDataset<'a> {
         //std^2
         todo!()
     }
-    pub fn non_unique(&self, colname: &String) -> DType{
-        let col_index = self._get_string_index(colname);
-        //let set: HashSet<&DType> = self.get_col(col_index).iter().collect();
-        DType::None
+    pub fn nunique(&self, colname: &String) -> DType{
+        todo!()
     }
-    
+    pub fn value_counts(&self, colname: &String) -> &[(String, DType)]{
+        todo!()
+    }
+    pub fn drop_col(&mut self, colname: &String){
+        todo!()
+    }
+    pub fn drop_row(&mut self, row_index: usize){
+        todo!()
+    }
+    pub fn drop_na(&mut self, criteria: Option<usize>,){
+        todo!()
+    }
+    pub fn drop_na_col(&mut self, criteria: Option<usize>){
+        todo!()
+    }
+    pub fn transpose(&mut self){
+        todo!()
+    }
+    pub fn push_row(&mut self, row: &[DType]){
+        self.data.push_row(row)
+    }
+    //stack some extra rows 
+    pub fn vstack(&mut self, other: BaseDataset){
+        //they have the same number of columns
+        assert!(self.len() == other.len());
+        self.data.data.append(Axis(0), other.data.data.view()).expect("Conjoining the arrays failed")
+    }
 
-    
+    //stack some extra columns
+    //we want to add the append the other BaseDataset columns wise. We have to assert that their lengths are the same
+    pub fn hstack(&mut self, other: BaseDataset){
+        //they have the same number of rows
+         assert!(self.column_names.len() == other.column_names.len());
+        self.data.data.append(Axis(1), other.data.data.view()).expect("Conjoining the arrays vertically failed!")
+    }
+
     //number of rows in the dataset
     pub fn len(&self) -> usize{
         self.data.len()

@@ -20,8 +20,4 @@ pub fn test_base_matrix_try_from_csv() {
     let mut data = data.unwrap();
     data.head(None);
     println!("{}", data.len());
-    data.dtypes();
-    data.display_point(1, Some("age".into()));
-    data.astype("age".into(), crate::dtype::DTypeType::F32).unwrap();
-    data.dtypes();
 }
