@@ -2,7 +2,6 @@
 #![allow(non_camel_case_types)]
 #![allow(unused_imports)]
 
-
 pub mod base_array;
 pub mod dtype;
 
@@ -11,7 +10,7 @@ pub(crate) use core::{num, ops::Range};
 pub(crate) use ndarray::{
     iter::LanesIter, Array2, ArrayBase, ArrayView, Axis, Dim, Ix1, Ix2, LinalgScalar, ViewRepr,
 };
-pub(crate) use num_traits::{Zero, FromPrimitive, Float};
+pub(crate) use num_traits::{Float, FromPrimitive, Zero};
 pub(crate) use std::{
     collections::HashMap,
     fmt::Display,
