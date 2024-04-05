@@ -8,10 +8,11 @@ use core::{
     str::FromStr,
 };
 use float_derive_macros::FloatEq;
-use std::{mem, ops::Neg};
+use std::{cmp::Ordering, mem, ops::Neg};
 use thiserror::Error;
 
-const ERR_MSG_INCOMPAT_TYPES: &'static str = "Attempt to perform numeric operation on imcompatible types!";
+const ERR_MSG_INCOMPAT_TYPES: &'static str =
+    "Attempt to perform numeric operation on imcompatible types!";
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, FloatEq)]
 pub enum DType {
@@ -80,7 +81,7 @@ impl DType {
     pub fn type_size(&self) -> usize {
         match self {
             DType::None => 1,
-            DType::F32(_) => mem::size_of::<DType>()                                                                   ,
+            DType::F32(_) => mem::size_of::<DType>(),
             DType::F64(_) => mem::size_of::<DType>(),
             DType::U32(_) => mem::size_of::<DType>(),
             DType::U64(_) => mem::size_of::<DType>(),
@@ -551,8 +552,6 @@ impl Div<DType> for DType {
     }
 }
 
-
-
 impl Div<&DType> for &DType {
     type Output = DType;
 
@@ -660,7 +659,7 @@ impl MulAssign<DType> for DType {
             }
             // else, no change
         } else {
-            *self = unsafe{(self as *const DType).as_ref().unwrap().clone() * &rhs}
+            *self = unsafe { (self as *const DType).as_ref().unwrap().clone() * &rhs }
         }
     }
 }
@@ -715,37 +714,37 @@ impl Display for DType {
     }
 }
 
-impl From<u32> for DType{
+impl From<u32> for DType {
     fn from(value: u32) -> Self {
         DType::U32(value)
     }
 }
 
-impl From<u64> for DType{
+impl From<u64> for DType {
     fn from(value: u64) -> Self {
         DType::U64(value)
     }
 }
 
-impl From<f32> for DType{
+impl From<f32> for DType {
     fn from(value: f32) -> Self {
-        if value.is_nan() | value.is_infinite() | value.is_subnormal(){
-            return DType::None
-       }
-       DType::F32(value)
+        if value.is_nan() | value.is_infinite() | value.is_subnormal() {
+            return DType::None;
+        }
+        DType::F32(value)
     }
 }
 
-impl From<f64> for DType{
+impl From<f64> for DType {
     fn from(value: f64) -> Self {
-       if value.is_nan() | value.is_infinite() | value.is_subnormal(){
-            return DType::None
-       }
-       DType::F64(value)
+        if value.is_nan() | value.is_infinite() | value.is_subnormal() {
+            return DType::None;
+        }
+        DType::F64(value)
     }
 }
 
-impl From<usize> for DType{
+impl From<usize> for DType {
     #[cfg(target_pointer_width = "16")]
     fn from(value: usize) -> Self {
         DType::U32(value as u32)
@@ -762,28 +761,27 @@ impl From<usize> for DType{
     }
 }
 
-impl From<String> for DType{
+impl From<String> for DType {
     fn from(value: String) -> Self {
         DType::Object(value)
     }
 }
 
-impl From<&str> for DType{
+impl From<&str> for DType {
     fn from(value: &str) -> Self {
         DType::Object(value.to_string())
     }
 }
 
-
-impl Zero for DType{
+impl Zero for DType {
     fn is_zero(&self) -> bool {
-        match self{
+        match self {
             DType::None => false,
             DType::F32(val) => *val == 0f32,
             DType::F64(val) => *val == 0f64,
             DType::U32(val) => *val == 0,
             DType::U64(val) => *val == 0,
-            DType::Object(_) => false
+            DType::Object(_) => false,
         }
     }
 
@@ -792,25 +790,248 @@ impl Zero for DType{
     }
 }
 
-
-
-impl Neg for DType{
+impl Neg for DType {
     type Output = DType;
     fn neg(self) -> Self::Output {
         match self {
-            DType::None => DType::None, 
+            DType::None => DType::None,
             DType::F32(var) => DType::F32(-var),
             DType::F64(var) => DType::F64(-var),
             DType::U32(var) => DType::F32(-(var as f32)),
             DType::U64(var) => DType::F64(-(var as f64)),
-            _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES)
+            _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
         }
     }
 }
 
-impl Ord for DType{
+impl Ord for DType {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        todo!()
+        let this_as_float = self.to_f64();
+        let other_as_float = other.to_f64();
+        if this_as_float.is_some() && other_as_float.is_some() {
+            return this_as_float.unwrap().total_cmp(&other_as_float.unwrap());
+        }
+        if (*self) == DType::None {
+            if (*other) == DType::None {
+                return Ordering::Equal;
+            } else {
+                return Ordering::Greater;
+            }
+        }
+        if (*other) == DType::None {
+            return Ordering::Less;
+        }
+        //both dtypes are now surely Object
+        if let DType::Object(this_as_str) = self {
+            if let DType::Object(other_as_str) = other {
+                this_as_str.cmp(&other_as_str)
+            } else {
+                Ordering::Equal
+            } //this should never be hit
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+impl ToPrimitive for DType {
+    fn to_u64(&self) -> Option<u64> {
+        match self {
+            DType::F32(var) => {
+                if *var < 0.0f32 {
+                    Option::None
+                } else {
+                    Option::Some(*var as u64)
+                }
+            }
+            DType::F64(var) => {
+                if *var < 0.0f64 {
+                    Option::None
+                } else {
+                    Option::Some(*var as u64)
+                }
+            }
+            DType::U32(var) => Option::Some(*var as u64),
+            DType::U64(var) => Option::Some(*var as u64),
+            _ => Option::None,
+        }
+    }
+    fn to_i64(&self) -> Option<i64> {
+        match self {
+            DType::F32(var) => Option::Some(*var as i64),
+            DType::F64(var) => Option::Some(*var as i64),
+            DType::U32(var) => Option::Some(*var as i64),
+            DType::U64(var) => Option::Some(*var as i64),
+            _ => Option::None,
+        }
+    }
+    fn to_isize(&self) -> Option<isize> {
+        match self {
+            DType::F32(var) => isize::try_from((*var) as i64).ok(),
+            DType::F64(var) => isize::try_from((*var) as i64).ok(),
+            DType::U32(var) => isize::try_from(*var).ok(),
+            DType::U64(var) => isize::try_from(*var).ok(),
+            _ => Option::None,
+        }
+    }
+    fn to_i8(&self) -> Option<i8> {
+        match self {
+            DType::F32(var) => i8::try_from((*var) as i64).ok(),
+            DType::F64(var) => i8::try_from((*var) as i64).ok(),
+            DType::U32(var) => i8::try_from(*var).ok(),
+            DType::U64(var) => i8::try_from(*var).ok(),
+            _ => Option::None,
+        }
+    }
+    fn to_i16(&self) -> Option<i16> {
+        match self {
+            DType::F32(var) => i16::try_from((*var) as i64).ok(),
+            DType::F64(var) => i16::try_from((*var) as i64).ok(),
+            DType::U32(var) => i16::try_from(*var).ok(),
+            DType::U64(var) => i16::try_from(*var).ok(),
+            _ => Option::None,
+        }
+    }
+    fn to_i32(&self) -> Option<i32> {
+        match self {
+            DType::F32(var) => i32::try_from((*var) as i64).ok(),
+            DType::F64(var) => i32::try_from((*var) as i64).ok(),
+            DType::U32(var) => i32::try_from(*var).ok(),
+            DType::U64(var) => i32::try_from(*var).ok(),
+            _ => Option::None,
+        }
+    }
+    fn to_i128(&self) -> Option<i128> {
+        match self {
+            DType::F32(var) => Option::Some(*var as i128),
+            DType::F64(var) => Option::Some(*var as i128),
+            DType::U32(var) => Option::Some(*var as i128),
+            DType::U64(var) => Option::Some(*var as i128),
+            _ => Option::None,
+        }
+    }
+    fn to_usize(&self) -> Option<usize> {
+        match self {
+            DType::F32(var) => {
+                if *var < 0.0f32 {
+                    Option::None
+                } else {
+                    usize::try_from((*var) as u64).ok()
+                }
+            }
+            DType::F64(var) => {
+                if *var < 0.0f64 {
+                    Option::None
+                } else {
+                    usize::try_from((*var) as u64).ok()
+                }
+            }
+            DType::U32(var) => usize::try_from(*var).ok(),
+            DType::U64(var) => usize::try_from(*var).ok(),
+            _ => Option::None,
+        }
+    }
+    fn to_u8(&self) -> Option<u8> {
+        match self {
+            DType::F32(var) => {
+                if *var < 0.0f32 {
+                    Option::None
+                } else {
+                    u8::try_from((*var) as u64).ok()
+                }
+            }
+            DType::F64(var) => {
+                if *var < 0.0f64 {
+                    Option::None
+                } else {
+                    u8::try_from((*var) as u64).ok()
+                }
+            }
+            DType::U32(var) => u8::try_from(*var).ok(),
+            DType::U64(var) => u8::try_from(*var).ok(),
+            _ => Option::None,
+        }
+    }
+    fn to_u16(&self) -> Option<u16> {
+        match self {
+            DType::F32(var) => {
+                if *var < 0.0f32 {
+                    Option::None
+                } else {
+                    u16::try_from((*var) as u64).ok()
+                }
+            }
+            DType::F64(var) => {
+                if *var < 0.0f64 {
+                    Option::None
+                } else {
+                    u16::try_from((*var) as u64).ok()
+                }
+            }
+            DType::U32(var) => u16::try_from(*var).ok(),
+            DType::U64(var) => u16::try_from(*var).ok(),
+            _ => Option::None,
+        }
+    }
+    fn to_u32(&self) -> Option<u32> {
+        match self {
+            DType::F32(var) => {
+                if *var < 0.0f32 {
+                    Option::None
+                } else {
+                    u32::try_from((*var) as u64).ok()
+                }
+            }
+            DType::F64(var) => {
+                if *var < 0.0f64 {
+                    Option::None
+                } else {
+                    u32::try_from((*var) as u64).ok()
+                }
+            }
+            DType::U32(var) => u32::try_from(*var).ok(),
+            DType::U64(var) => u32::try_from(*var).ok(),
+            _ => Option::None,
+        }
+    }
+    fn to_u128(&self) -> Option<u128> {
+        match self {
+            DType::F32(var) => {
+                if *var < 0.0f32 {
+                    Option::None
+                } else {
+                    Option::Some(*var as u128)
+                }
+            }
+            DType::F64(var) => {
+                if *var < 0.0f64 {
+                    Option::None
+                } else {
+                    Option::Some(*var as u128)
+                }
+            }
+            DType::U32(var) => Option::Some(*var as u128),
+            DType::U64(var) => Option::Some(*var as u128),
+            _ => Option::None,
+        }
+    }
+    fn to_f32(&self) -> Option<f32> {
+        match self {
+            DType::F32(var) => Option::Some(*var as f32),
+            DType::F64(var) => Option::Some(*var as f32),
+            DType::U32(var) => Option::Some(*var as f32),
+            DType::U64(var) => Option::Some(*var as f32),
+            _ => Option::None,
+        }
+    }
+    fn to_f64(&self) -> Option<f64> {
+        match self {
+            DType::F32(var) => Option::Some(*var as f64),
+            DType::F64(var) => Option::Some(*var as f64),
+            DType::U32(var) => Option::Some(*var as f64),
+            DType::U64(var) => Option::Some(*var as f64),
+            _ => Option::None,
+        }
     }
 }
 

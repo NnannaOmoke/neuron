@@ -7,7 +7,7 @@ use crate::{
     dtype::{self, DType, DTypeType},
     *,
 };
-use ndarray::{ArrayView1, ShapeError, ArrayViewMut1};
+use ndarray::{ArrayView1, ArrayViewMut1, ShapeError};
 use std::io::Read;
 use thiserror::Error;
 
@@ -54,8 +54,10 @@ impl BaseMatrix {
             .push_column(slice.into())
             .expect("Shape is not compatible")
     }
-    pub(crate) fn push_row(&mut self, slice: &[DType]){
-        self.data.push_row(slice.into()).expect("Incompatible shapes!")
+    pub(crate) fn push_row(&mut self, slice: &[DType]) {
+        self.data
+            .push_row(slice.into())
+            .expect("Incompatible shapes!")
     }
     pub(crate) fn pop_col(&mut self) -> &[DType] {
         todo!()
@@ -114,7 +116,6 @@ impl BaseMatrix {
         Ok(BaseMatrix { data: arr })
     }
 }
-
 
 impl AddAssign<&BaseMatrix> for BaseMatrix {
     fn add_assign(&mut self, rhs: &BaseMatrix) {
