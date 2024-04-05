@@ -12,17 +12,17 @@ use std::{borrow::Cow, io::Read, mem::transmute};
 //we'll implement quite the number of methods for this, hopefully
 #[repr(C)]
 #[derive(Clone)]
-pub(crate) struct BaseDataset<'a> {
+pub(crate) struct BaseDataset {
     data: BaseMatrix,
-    column_names: Cow<'a, [Cow<'a, str>]>,
+    column_names: Vec<String>,
 }
 
-impl<'a> BaseDataset<'a> {
+impl BaseDataset {
     pub fn from_matrix(
         data: BaseMatrix,
         compute_on_creation: bool,
-        colnames: Cow<'a, [Cow<'a, str>]>,
-    ) -> BaseDataset<'a> {
+        colnames: Vec<String>,
+    ) -> BaseDataset {
         Self {
             data,
             column_names: colnames,
@@ -33,8 +33,8 @@ impl<'a> BaseDataset<'a> {
         reader: csv::Reader<R>,
         prefer_precision: bool,
         compute_on_creation: bool,
-        colnames: Cow<'a, [Cow<'a, str>]>,
-    ) -> Result<BaseDataset<'a>, super::Error> {
+        colnames: Vec<String>,
+    ) -> Result<BaseDataset, super::Error> {
         Ok(BaseDataset::from_matrix(
             BaseMatrix::try_from_csv(reader, prefer_precision)?,
             compute_on_creation,
@@ -76,7 +76,7 @@ impl<'a> BaseDataset<'a> {
         // Recalculate cached values
     }
     //returns the colum names of the basedataset
-    pub fn columns(&'a self) -> Cow<'a, [Cow<'a, str>]> {
+    pub fn columns(&self) -> Vec<String> {
         self.column_names.clone()
     }
     //this can get a little tricky, but basically we're assuming this
@@ -150,7 +150,7 @@ impl<'a> BaseDataset<'a> {
     //this will, based on the selection given, return parts of the dataset that have cols that are...
     //of the dtype
     //it will return a read only reference to the current matrix, with maybe a few cols missing?
-    pub fn select_dtypes(&self, _include: &[DType], _exlude: Option<&[DType]>) -> &'a Self {
+    pub fn select_dtypes(&self, _include: &[DType], _exlude: Option<&[DType]>) -> &Self {
         todo!()
     }
     //returns the number of dimensions of the dataset
@@ -179,7 +179,7 @@ impl<'a> BaseDataset<'a> {
         let headers = self
             .column_names
             .iter()
-            .map(|name_cow| name_cow.clone().into_owned())
+            .map(|name_cow| name_cow.clone())
             .collect::<Vec<_>>();
         let data: Vec<Vec<DType>> = self
             .data
@@ -217,12 +217,12 @@ impl<'a> BaseDataset<'a> {
         *prev = new_point;
     }
     //add a column to the data
-    pub fn push_col(&mut self, colname: Cow<'a, str>, slice: &[DType]) {
-        self.column_names.to_mut().push(colname);
+    pub fn push_col(&mut self, colname: String, slice: &[DType]) {
+        self.column_names.push(colname);
         self.data.push_col(slice)
     }
     //iterator over column name, data pairs
-    pub fn items<'s>(&'s mut self) -> Zip<Iter<Cow<'s, str>>, base_array::ColumnIter<'s>> {
+    pub fn items<'s>(&'s mut self) -> Zip<Iter<String>, base_array::ColumnIter<'s>> {
         zip(self.column_names.iter(), self.data.cols())
     }
     //iterator over row-index, data pairs
