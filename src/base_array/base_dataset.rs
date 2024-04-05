@@ -2,6 +2,7 @@ use std::{sync::RwLock, path::Path, collections::HashSet};
 
 use super::*;
 use crate::dtype::{self, DType, DTypeType};
+use csv::Position;
 use ndarray::{IndexLonger, iter::{Axes, Indices, LanesMut}, s};
 use std::{borrow::Cow, io::Read, mem::transmute};
 
@@ -37,6 +38,24 @@ impl BaseDataset {
             compute_on_creation,
             colnames,
         ))
+    }
+
+    pub fn from_csv(path: &Path, prefer_precision: bool, compute_on_creation: bool, has_headers: bool, sep: u8) -> Result<Self, super::Error>{
+        let mut reader = csv::ReaderBuilder::new().has_headers(has_headers).delimiter(sep).from_path(path)?;
+        let mut colnames = vec![];
+        if has_headers{
+            colnames = reader.headers()?.iter().map(|slice| String::from(slice)).collect();
+        }
+        else{
+            //we need to get the length of the reader
+            let len = reader.records().next().unwrap().unwrap().iter().count();
+            //reset the reader
+            reader.seek(Position::new())?;
+            (0.. len).into_iter().for_each(|num| {
+                colnames.push(format!("Column{}", num));
+            });
+        }
+        Self::try_from_csv_reader(reader, prefer_precision, compute_on_creation, colnames)
     }
     //iterator over columns 
     pub fn cols(&self) -> ColumnIter<'_>{
