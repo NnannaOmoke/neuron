@@ -1,5 +1,5 @@
 use micromath::F32;
-use num_traits::{NumCast, ToPrimitive};
+use num_traits::{Num, NumCast, ToPrimitive};
 
 use crate::*;
 use core::{
@@ -11,7 +11,7 @@ use float_derive_macros::FloatEq;
 use std::{cmp::Ordering, mem, ops::Neg};
 use thiserror::Error;
 
-const ERR_MSG_INCOMPAT_TYPES: &'static str =
+pub const ERR_MSG_INCOMPAT_TYPES: &'static str =
     "Attempt to perform numeric operation on imcompatible types!";
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, FloatEq)]
@@ -1032,6 +1032,12 @@ impl ToPrimitive for DType {
             DType::U64(var) => Option::Some(*var as f64),
             _ => Option::None,
         }
+    }
+}
+
+impl NumCast for DType {
+    fn from<T: ToPrimitive>(n: T) -> Option<Self> {
+        Some(DType::F64(n.to_f64().unwrap()))
     }
 }
 

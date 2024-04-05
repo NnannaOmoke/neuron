@@ -1,12 +1,12 @@
-use std::{collections::HashSet, path::Path, sync::RwLock};
-
 use super::*;
-use crate::dtype::{self, DType, DTypeType};
+use crate::dtype::{self, DType, DTypeType, ERR_MSG_INCOMPAT_TYPES};
+use csv::Position;
 use ndarray::{
     iter::{Axes, Indices, LanesMut},
     s, IndexLonger,
 };
 use std::{borrow::Cow, io::Read, mem::transmute};
+use std::{collections::HashSet, path::Path, sync::RwLock};
 
 //this will be the dataset visible to the external users
 //we'll implement quite the number of methods for this, hopefully
@@ -42,25 +42,37 @@ impl BaseDataset {
         ))
     }
 
-    pub fn from_csv(path: &Path, prefer_precision: bool, compute_on_creation: bool, has_headers: bool, sep: u8) -> Result<Self, super::Error>{
-        let mut reader = csv::ReaderBuilder::new().has_headers(has_headers).delimiter(sep).from_path(path)?;
+    pub fn from_csv(
+        path: &Path,
+        prefer_precision: bool,
+        compute_on_creation: bool,
+        has_headers: bool,
+        sep: u8,
+    ) -> Result<Self, super::Error> {
+        let mut reader = csv::ReaderBuilder::new()
+            .has_headers(has_headers)
+            .delimiter(sep)
+            .from_path(path)?;
         let mut colnames = vec![];
-        if has_headers{
-            colnames = reader.headers()?.iter().map(|slice| String::from(slice)).collect();
-        }
-        else{
+        if has_headers {
+            colnames = reader
+                .headers()?
+                .iter()
+                .map(|slice| String::from(slice))
+                .collect();
+        } else {
             //we need to get the length of the reader
             let len = reader.records().next().unwrap().unwrap().iter().count();
             //reset the reader
             reader.seek(Position::new())?;
-            (0.. len).into_iter().for_each(|num| {
+            (0..len).into_iter().for_each(|num| {
                 colnames.push(format!("Column{}", num));
             });
         }
         Self::try_from_csv_reader(reader, prefer_precision, compute_on_creation, colnames)
     }
-    //iterator over columns 
-    pub fn cols(&self) -> ColumnIter<'_>{
+    //iterator over columns
+    pub fn cols(&self) -> ColumnIter<'_> {
         self.data.cols()
     }
     //iterator over rows
@@ -374,11 +386,23 @@ impl BaseDataset {
     }
     //for all these methods,we need to make f32 hashable
     pub fn std(&self, colname: &String) -> DType {
-        todo!()
+        let col_index = self._get_string_index(colname);
+        //there will always be cheese
+        self.get_col(col_index)
+            .map(|x| match x {
+                DType::F32(var) => *var as f64,
+                DType::F64(var) => *var,
+                DType::U32(var) => *var as f64,
+                DType::U64(var) => *var as f64,
+                _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            })
+            .std(0.0)
+            .into()
     }
     pub fn variance(&self, colname: &String) -> DType {
         //std^2
-        todo!()
+        let std = self.std(colname);
+        return (&std * &std).into();
     }
     pub fn nunique(&self, colname: &String) -> DType {
         todo!()
