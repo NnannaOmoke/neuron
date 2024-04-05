@@ -235,8 +235,8 @@ impl<'a> BaseDataset<'a> {
     pub fn itertuples(&self) -> RowIter<'_> {
         self.data.rows()
     }
-    //should pop the last item in the queue
-    pub fn pop(&mut self) {
+    //should pop the last col in the queue
+    pub fn pop(&mut self) -> Option<&[DType]>{
         todo!()
     }
     
@@ -336,6 +336,7 @@ impl<'a> BaseDataset<'a> {
         let col_index = self._get_string_index(colname);
         self.get_col(col_index).sum()
     }
+    //for all these methods,we need to make f32 hashable 
     pub fn std(&self, colname: &String) -> DType{
         todo!()
     }
@@ -349,17 +350,58 @@ impl<'a> BaseDataset<'a> {
     pub fn value_counts(&self, colname: &String) -> &[(String, DType)]{
         todo!()
     }
+    //removes a column
     pub fn drop_col(&mut self, colname: &String){
-        todo!()
+        let col_index = self._get_string_index(colname);
+        self.data.data.remove_index(Axis(1), col_index);
     }
+    //removes a row
     pub fn drop_row(&mut self, row_index: usize){
-        todo!()
+        self.data.data.remove_index(Axis(0), row_index);
     }
-    pub fn drop_na(&mut self, criteria: Option<usize>,){
-        todo!()
-    }
-    pub fn drop_na_col(&mut self, criteria: Option<usize>){
-        todo!()
+    pub fn drop_na(&mut self, criteria: Option<usize>, row_first: bool) {
+        let delete_marker = match criteria{
+            Some(marker) => marker,
+            None => 1,
+        };
+        let mut culprits = Vec::new();//have to use this cause can't borrow mutably and immutably. should be fine though
+        //delete if the rows dont match the criteria
+        if row_first{
+            for (index, row) in self.rows().enumerate(){
+                let mut current_count = 0;
+                row.into_iter().for_each(|val| {
+                    match val{
+                        DType::None => current_count += 1,
+                        _ => {}
+                    }
+                });
+                if current_count >= delete_marker{
+                   culprits.push(index);
+                }
+
+            }
+            for elem in culprits{
+                self.drop_row(elem);
+            }
+        }
+        else{
+            for(index, col) in self.cols().enumerate(){
+                let mut current_count = 0;
+                col.into_iter().for_each(|val| {
+                    match val{
+                        DType::None => current_count += 1,
+                        _ => {}
+                    }
+                });
+                if current_count >= delete_marker{
+                    culprits.push(index);
+                }
+            }
+            for elem in culprits{
+                self._raw_col_drop(elem);
+            }
+        }
+        
     }
     pub fn transpose(&mut self){
         todo!()
@@ -386,7 +428,9 @@ impl<'a> BaseDataset<'a> {
     pub fn len(&self) -> usize{
         self.data.len()
     }
-
+    fn _raw_col_drop(&mut self, col_index: usize){
+        self.data.data.remove_index(Axis(1), col_index)
+    } 
     fn _get_string_index(&self, colname: &String) -> usize {
         self.column_names
             .iter()
