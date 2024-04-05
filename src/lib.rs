@@ -6,22 +6,50 @@ pub mod base_array;
 pub mod dtype;
 
 //All imports are defined here and made (pub)crate
-pub(crate) use core::{num, ops::Range};
-pub(crate) use ndarray::{
-    iter::LanesIter, Array2, ArrayBase, ArrayView, Axis, Dim, Ix1, Ix2, LinalgScalar, ViewRepr,
+pub(crate) use csv::Position;
+pub(crate) use core::{
+    fmt,
+    num::{self, ParseFloatError, ParseIntError}, 
+    ops::Range,
+    str::FromStr,
 };
-pub(crate) use num_traits::{Float, FromPrimitive, Zero};
+pub(crate) use float_derive_macros::FloatEq;
+pub(crate) use ndarray::{
+    iter::{LanesIter, Axes, Indices, LanesMut},
+    Array2, 
+    ArrayBase, 
+    ArrayView, 
+    Axis, 
+    Dim, 
+    IndexLonger,
+    Ix1, 
+    Ix2, 
+    LinalgScalar, 
+    s,
+    ViewRepr,
+};
+pub(crate) use num_traits::{
+    Float, 
+    FromPrimitive, 
+    Num,
+    NumCast,
+    ToPrimitive,
+    Zero
+};
 pub(crate) use std::{
+    cmp::Ordering,
     collections::HashMap,
     fmt::Display,
     fs::OpenOptions,
-    io::BufReader,
+    io::{BufReader, Read},
     iter::{zip, Zip},
-    ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Sub, SubAssign},
-    path::PathBuf,
+    mem,
+    ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign},
+    path::{PathBuf, Path},
     slice::Iter,
     vec,
 };
+pub(crate) use thiserror::Error;
 
 // fn test_something(){
 //     let arr = nalgebra::DMatrix::repeat(100, 100, 4f32);

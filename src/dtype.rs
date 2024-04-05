@@ -1,15 +1,5 @@
-use micromath::F32;
-use num_traits::{Num, NumCast, ToPrimitive};
-
+use super::*;
 use crate::*;
-use core::{
-    fmt,
-    num::{ParseFloatError, ParseIntError},
-    str::FromStr,
-};
-use float_derive_macros::FloatEq;
-use std::{cmp::Ordering, mem, ops::Neg};
-use thiserror::Error;
 
 pub const ERR_MSG_INCOMPAT_TYPES: &'static str =
     "Attempt to perform numeric operation on imcompatible types!";

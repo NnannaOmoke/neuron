@@ -1,13 +1,5 @@
 use super::*;
-use crate::dtype::{self, DType, DTypeType, ERR_MSG_INCOMPAT_TYPES};
-use csv::Position;
-use ndarray::{
-    iter::{Axes, Indices, LanesMut},
-    s, IndexLonger,
-};
-use std::{borrow::Cow, io::Read, mem::transmute};
-use std::{collections::HashSet, path::Path, sync::RwLock};
-
+use crate::*;
 //this will be the dataset visible to the external users
 //we'll implement quite the number of methods for this, hopefully
 #[repr(C)]
@@ -269,18 +261,10 @@ impl BaseDataset {
         todo!()
     }
 
-    //applies a function to a given range
-    // pub fn apply<F>(&mut self, range: Range<usize>, mut function: F)
-    // where
-    //     F: FnMut(&mut DType) -> (),
-    // {
-    //     self.data[range].iter_mut().for_each(|x| function(x))
-    // }
-
     //applies a function to a column
     pub fn map<F>(&mut self, colname: String, mut function: F)
     where
-        F: FnMut(&mut DType) -> (),
+        F: FnMut(&mut DType),
     {
         let col_index = self._get_string_index(&colname);
         self.get_col_mut(col_index)
@@ -384,7 +368,7 @@ impl BaseDataset {
         let col_index = self._get_string_index(colname);
         self.get_col(col_index).sum()
     }
-    //for all these methods,we need to make f32 hashable
+    //the population standard deviation
     pub fn std(&self, colname: &String) -> DType {
         let col_index = self._get_string_index(colname);
         //there will always be cheese
@@ -394,11 +378,12 @@ impl BaseDataset {
                 DType::F64(var) => *var,
                 DType::U32(var) => *var as f64,
                 DType::U64(var) => *var as f64,
-                _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+                _ => panic!("{}", dtype::ERR_MSG_INCOMPAT_TYPES),
             })
             .std(0.0)
             .into()
     }
+    //std squared
     pub fn variance(&self, colname: &String) -> DType {
         //std^2
         let std = self.std(colname);
