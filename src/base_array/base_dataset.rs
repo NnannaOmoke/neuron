@@ -12,7 +12,6 @@ pub(crate) struct BaseDataset {
 impl BaseDataset {
     pub fn from_matrix(
         data: BaseMatrix,
-        compute_on_creation: bool,
         colnames: Vec<String>,
     ) -> BaseDataset {
         Self {
@@ -24,12 +23,10 @@ impl BaseDataset {
     pub fn try_from_csv_reader<R: Read>(
         reader: csv::Reader<R>,
         prefer_precision: bool,
-        compute_on_creation: bool,
         colnames: Vec<String>,
     ) -> Result<BaseDataset, super::Error> {
         Ok(BaseDataset::from_matrix(
             BaseMatrix::try_from_csv(reader, prefer_precision)?,
-            compute_on_creation,
             colnames,
         ))
     }
@@ -37,7 +34,6 @@ impl BaseDataset {
     pub fn from_csv(
         path: &Path,
         prefer_precision: bool,
-        compute_on_creation: bool,
         has_headers: bool,
         sep: u8,
     ) -> Result<Self, super::Error> {
@@ -61,7 +57,7 @@ impl BaseDataset {
                 colnames.push(format!("Column{}", num));
             });
         }
-        Self::try_from_csv_reader(reader, prefer_precision, compute_on_creation, colnames)
+        Self::try_from_csv_reader(reader, prefer_precision, colnames)
     }
     //iterator over columns
     pub fn cols(&self) -> ColumnIter<'_> {
@@ -98,8 +94,8 @@ impl BaseDataset {
         // Recalculate cached values
     }
     //returns the colum names of the basedataset
-    pub fn columns(&self) -> Vec<String> {
-        self.column_names.clone()
+    pub fn columns(&self) -> &Vec<String> {
+        &self.column_names
     }
     //this can get a little tricky, but basically we're assuming this
     //every single column has a unique datatype, that everything under it follows
@@ -169,12 +165,6 @@ impl BaseDataset {
         }
         return_val
     }
-    //this will, based on the selection given, return parts of the dataset that have cols that are...
-    //of the dtype
-    //it will return a read only reference to the current matrix, with maybe a few cols missing?
-    pub fn select_dtypes(&self, _include: &[DType], _exlude: Option<&[DType]>) -> &Self {
-        todo!()
-    }
     //returns the number of dimensions of the dataset
     #[inline]
     pub const fn ndim(&self) -> usize {
@@ -198,11 +188,7 @@ impl BaseDataset {
     }
     //returns the first n rows in the dataframe (usually this should be printed out as a table)
     pub fn head(&self, n: Option<usize>) {
-        let headers = self
-            .column_names
-            .iter()
-            .map(|name_cow| name_cow.clone())
-            .collect::<Vec<_>>();
+        let headers = self.column_names.iter().collect::<Vec<_>>();
         let data: Vec<Vec<DType>> = self
             .data
             .rows()
@@ -217,12 +203,30 @@ impl BaseDataset {
         }
         prettytable.printstd();
     }
-    //returns the last elements in the dataset
+    //returns the last n rows in the dataset
     pub fn tail(&self, n: Option<usize>) -> () {
-        let _headers = &self.column_names;
-        //we need to implement the double ended iterator trait for BaseMatrix for a more efficient implementation of this
-        //all this will be replaced when that is done
-        let _size = self.data.data.nrows();
+        let headers = self.column_names.iter().collect::<Vec<_>>();
+        let len = self.len();
+        let num_rows = match n {
+            Some(value) => {
+                if value > len {
+                    5
+                } else {
+                    value
+                }
+            }
+            None => 5,
+        };
+        let mut data = vec![];
+        for row in len - 1..len - 1 - num_rows {
+            data.push(Vec::from(self.get_row(row).as_slice().unwrap()))
+        }
+        let mut table = prettytable::Table::new();
+        table.add_row(headers.into());
+        data.iter().for_each(|row| {
+            table.add_row(row.into());
+        });
+        table.printstd();
     }
     //get the data at a single point
     pub fn display_point(&self, rindex: usize, colname: Option<String>) {
@@ -256,11 +260,6 @@ impl BaseDataset {
     pub fn itertuples(&self) -> RowIter<'_> {
         self.data.rows()
     }
-    //should pop the last col in the queue
-    pub fn pop(&mut self) -> Option<&[DType]> {
-        todo!()
-    }
-
     //applies a function to a column
     pub fn map<F>(&mut self, colname: String, mut function: F)
     where
@@ -274,7 +273,7 @@ impl BaseDataset {
     //applies a series of functions to a column
     pub fn pipe<F>(&mut self, colname: String, functions: &mut [F])
     where
-        F: FnMut(&mut DType) -> (),
+        F: FnMut(&mut DType),
     {
         let col_index = self._get_string_index(&colname);
         self.get_col_mut(col_index)
@@ -328,13 +327,53 @@ impl BaseDataset {
     //get the mode of the column, i.e. most occuring element
     pub fn mode(&self, colname: &String) -> DType {
         let col_index = self._get_string_index(colname);
-        todo!()
+        let dtypetype = DTypeType::from(self.get_col(col_index).first().unwrap());
+        match dtypetype{
+            DTypeType::None => { panic!()},
+            DTypeType::F32 | DTypeType::F64 | DTypeType::U32 | DTypeType::U64 => {
+            let counter = self.get_col(col_index).iter().filter(|x| {
+                match x{
+                    DType::None => false,
+                    _ => true,
+                }
+            }).map(|val| {
+                match val{
+                    DType::F32(val) => NotNan::from_f64(*val as f64),
+                    DType::F64(val) => NotNan::from_f64(*val as f64),
+                    DType::U32(val) => NotNan::from_f64(*val as f64),
+                    DType::U64(val) => NotNan::from_f64(*val as f64),
+                    _ => unimplemented!(),
+                }
+            }).collect::<Counter<_>>();
+            let highest_val: Option<NotNan<f64>> = counter.most_common()[0].0;
+            highest_val.unwrap().to_f64().unwrap().into()
+            },
+            DTypeType::Object => {
+                let counter = self.get_col(col_index).iter().filter(|x|{
+                    match x{
+                        DType::None => false,
+                        _ => true,
+                    }
+                }).map(|val| {
+                    match val{
+                        DType::Object(val) => val.clone(),
+                        _ => unimplemented!()
+                    }
+                }).collect::<Counter<_>>();
+                counter.most_common()[0].0.clone().into()
+            }
+        }
+     
     }
     //smallest element in the column
     pub fn min(&self, colname: &String) -> DType {
         let col_index = self._get_string_index(colname);
         self.get_col(col_index)
             .iter()
+            .filter(|x| match x {
+                DType::None => false,
+                _ => true,
+            })
             .min()
             .expect("Empty Column")
             .clone()
@@ -344,6 +383,10 @@ impl BaseDataset {
         let col_index = self._get_string_index(colname);
         self.get_col(col_index)
             .iter()
+            .filter(|x| match x {
+                DType::None => false,
+                _ => true,
+            })
             .max()
             .expect("Empty Column")
             .clone()
@@ -388,12 +431,6 @@ impl BaseDataset {
         //std^2
         let std = self.std(colname);
         return (&std * &std).into();
-    }
-    pub fn nunique(&self, colname: &String) -> DType {
-        todo!()
-    }
-    pub fn value_counts(&self, colname: &String) -> &[(String, DType)] {
-        todo!()
     }
     //removes a column
     pub fn drop_col(&mut self, colname: &String) {

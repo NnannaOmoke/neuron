@@ -6,36 +6,22 @@ pub mod base_array;
 pub mod dtype;
 
 //All imports are defined here and made (pub)crate
-pub(crate) use csv::Position;
 pub(crate) use core::{
     fmt,
-    num::{self, ParseFloatError, ParseIntError}, 
+    num::{self, ParseFloatError, ParseIntError},
     ops::Range,
     str::FromStr,
 };
+pub(crate) use counter::Counter;
+pub(crate) use csv::Position;
 pub(crate) use float_derive_macros::FloatEq;
 pub(crate) use ndarray::{
-    iter::{LanesIter, Axes, Indices, LanesMut},
-    Array2, 
-    ArrayBase, 
-    ArrayView, 
-    Axis, 
-    Dim, 
-    IndexLonger,
-    Ix1, 
-    Ix2, 
-    LinalgScalar, 
-    s,
+    iter::{Axes, Indices, LanesIter, LanesMut},
+    s, Array2, ArrayBase, ArrayView, ArrayView2, Axis, Dim, IndexLonger, Ix1, Ix2, LinalgScalar,
     ViewRepr,
 };
-pub(crate) use num_traits::{
-    Float, 
-    FromPrimitive, 
-    Num,
-    NumCast,
-    ToPrimitive,
-    Zero
-};
+pub(crate) use ordered_float::NotNan;
+pub(crate) use num_traits::{Float, FromPrimitive, Num, NumCast, ToPrimitive, Zero};
 pub(crate) use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -45,7 +31,7 @@ pub(crate) use std::{
     iter::{zip, Zip},
     mem,
     ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign},
-    path::{PathBuf, Path},
+    path::{Path, PathBuf},
     slice::Iter,
     vec,
 };

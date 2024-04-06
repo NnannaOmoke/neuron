@@ -118,6 +118,7 @@ impl DType {
             }
         }
     }
+
 }
 
 impl Add<DType> for DType {
@@ -582,7 +583,7 @@ impl Div<&DType> for &DType {
                 F64(r) => F64(l / r),
                 Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
-            Object(l) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
+            Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
         }
     }
 }

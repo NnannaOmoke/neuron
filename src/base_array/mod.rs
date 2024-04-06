@@ -144,12 +144,12 @@ impl SubAssign<&BaseMatrix> for BaseMatrix {
 }
 //Subtraction is not implemented yet
 
-impl Index<usize> for BaseMatrix {
-    type Output = [DType];
-    fn index(&self, index: usize) -> &Self::Output {
-        &self[index] //this is row major, apparently, so this returns a row, I think
-    }
-}
+// impl Index<usize> for BaseMatrix {
+//     type Output = [DType];
+//     fn index(&self, index: usize) -> &Self::Output {
+//         &self[index] //this is row major, apparently, so this returns a row, I think
+//     }
+// }
 
 // impl<T> std::ops::Mul<T> for BaseMatrix {
 //     type Output = BaseMatrix;

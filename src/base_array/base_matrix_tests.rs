@@ -7,7 +7,6 @@ pub fn test_base_matrix_try_from_csv() {
         Path::new("src/base_array/test_data/test.csv"),
         false,
         false,
-        false,
         b',',
     );
     let data = data.unwrap();
