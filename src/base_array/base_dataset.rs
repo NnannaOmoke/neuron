@@ -10,10 +10,7 @@ pub(crate) struct BaseDataset {
 }
 
 impl BaseDataset {
-    pub fn from_matrix(
-        data: BaseMatrix,
-        colnames: Vec<String>,
-    ) -> BaseDataset {
+    pub fn from_matrix(data: BaseMatrix, colnames: Vec<String>) -> BaseDataset {
         Self {
             data,
             column_names: colnames,
@@ -328,42 +325,45 @@ impl BaseDataset {
     pub fn mode(&self, colname: &String) -> DType {
         let col_index = self._get_string_index(colname);
         let dtypetype = DTypeType::from(self.get_col(col_index).first().unwrap());
-        match dtypetype{
-            DTypeType::None => { panic!()},
+        match dtypetype {
+            DTypeType::None => {
+                panic!()
+            }
             DTypeType::F32 | DTypeType::F64 | DTypeType::U32 | DTypeType::U64 => {
-            let counter = self.get_col(col_index).iter().filter(|x| {
-                match x{
-                    DType::None => false,
-                    _ => true,
-                }
-            }).map(|val| {
-                match val{
-                    DType::F32(val) => NotNan::from_f64(*val as f64),
-                    DType::F64(val) => NotNan::from_f64(*val as f64),
-                    DType::U32(val) => NotNan::from_f64(*val as f64),
-                    DType::U64(val) => NotNan::from_f64(*val as f64),
-                    _ => unimplemented!(),
-                }
-            }).collect::<Counter<_>>();
-            let highest_val: Option<NotNan<f64>> = counter.most_common()[0].0;
-            highest_val.unwrap().to_f64().unwrap().into()
-            },
-            DTypeType::Object => {
-                let counter = self.get_col(col_index).iter().filter(|x|{
-                    match x{
+                let counter = self
+                    .get_col(col_index)
+                    .iter()
+                    .filter(|x| match x {
                         DType::None => false,
                         _ => true,
-                    }
-                }).map(|val| {
-                    match val{
+                    })
+                    .map(|val| match val {
+                        DType::F32(val) => NotNan::from_f64(*val as f64),
+                        DType::F64(val) => NotNan::from_f64(*val as f64),
+                        DType::U32(val) => NotNan::from_f64(*val as f64),
+                        DType::U64(val) => NotNan::from_f64(*val as f64),
+                        _ => unimplemented!(),
+                    })
+                    .collect::<Counter<_>>();
+                let highest_val: Option<NotNan<f64>> = counter.most_common()[0].0;
+                highest_val.unwrap().to_f64().unwrap().into()
+            }
+            DTypeType::Object => {
+                let counter = self
+                    .get_col(col_index)
+                    .iter()
+                    .filter(|x| match x {
+                        DType::None => false,
+                        _ => true,
+                    })
+                    .map(|val| match val {
                         DType::Object(val) => val.clone(),
-                        _ => unimplemented!()
-                    }
-                }).collect::<Counter<_>>();
+                        _ => unimplemented!(),
+                    })
+                    .collect::<Counter<_>>();
                 counter.most_common()[0].0.clone().into()
             }
         }
-     
     }
     //smallest element in the column
     pub fn min(&self, colname: &String) -> DType {

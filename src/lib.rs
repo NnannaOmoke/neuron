@@ -20,8 +20,8 @@ pub(crate) use ndarray::{
     s, Array2, ArrayBase, ArrayView, ArrayView2, Axis, Dim, IndexLonger, Ix1, Ix2, LinalgScalar,
     ViewRepr,
 };
-pub(crate) use ordered_float::NotNan;
 pub(crate) use num_traits::{Float, FromPrimitive, Num, NumCast, ToPrimitive, Zero};
+pub(crate) use ordered_float::NotNan;
 pub(crate) use std::{
     cmp::Ordering,
     collections::HashMap,

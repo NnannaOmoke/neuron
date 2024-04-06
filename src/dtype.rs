@@ -118,7 +118,6 @@ impl DType {
             }
         }
     }
-
 }
 
 impl Add<DType> for DType {
