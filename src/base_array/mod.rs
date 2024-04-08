@@ -14,7 +14,7 @@ use thiserror::Error;
 #[repr(C)]
 #[derive(Clone)]
 pub(crate) struct BaseMatrix {
-    data: Array2<DType>,
+    pub data: Array2<DType>,
 }
 
 impl BaseMatrix {

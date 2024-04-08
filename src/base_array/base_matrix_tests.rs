@@ -1,3 +1,4 @@
+use crate::dtype::DType;
 use super::{base_dataset::BaseDataset, BaseMatrix};
 use std::{borrow::Cow, path::Path};
 
