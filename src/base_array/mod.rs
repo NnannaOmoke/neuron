@@ -14,7 +14,7 @@ use thiserror::Error;
 #[repr(C)]
 #[derive(Clone)]
 pub(crate) struct BaseMatrix {
-    data: Array2<DType>,
+    pub data: Array2<DType>,
 }
 
 impl BaseMatrix {
@@ -40,24 +40,20 @@ impl BaseMatrix {
     pub(crate) fn get_mut_row(&mut self, rindex: usize) -> ArrayViewMut1<'_, DType> {
         self.data.row_mut(rindex)
     }
-    pub(crate) fn get(&self, rindex: usize, cindex: usize) -> &DType {
-        self.data.get((rindex, cindex)).unwrap()
+    pub(crate) fn get(&self, rindex: usize, cindex: usize) -> Option<&DType> {
+        self.data.get((rindex, cindex))
     }
-    pub(crate) fn get_mut(&mut self, rindex: usize, cindex: usize) -> &mut DType {
-        self.data.get_mut((rindex, cindex)).unwrap()
+    pub(crate) fn get_mut(&mut self, rindex: usize, cindex: usize) -> Option<&mut DType> {
+        self.data.get_mut((rindex, cindex))
     }
     pub(crate) fn len(&self) -> usize {
         self.data.nrows()
     }
-    pub(crate) fn push_col(&mut self, slice: &[DType]) {
-        self.data
-            .push_column(slice.into())
-            .expect("Shape is not compatible")
+    pub(crate) fn push_col(&mut self, slice: &[DType]) -> Result<(), ShapeError> {
+        self.data.push_column(slice.into())
     }
-    pub(crate) fn push_row(&mut self, slice: &[DType]) {
-        self.data
-            .push_row(slice.into())
-            .expect("Incompatible shapes!")
+    pub(crate) fn push_row(&mut self, slice: &[DType]) -> Result<(), ShapeError> {
+        self.data.push_row(slice.into())
     }
     pub(crate) fn pop_col(&mut self) -> &[DType] {
         todo!()
