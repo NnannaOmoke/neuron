@@ -43,11 +43,16 @@ impl BaseDataset {
             colnames = reader
                 .headers()?
                 .iter()
-                .map(|slice| String::from(slice))
+                .map(|slice| String::from(slice).trim().to_string())
                 .collect();
         } else {
             //we need to get the length of the reader
-            let len = reader.records().next().unwrap().unwrap().iter().count();
+            let len = reader.records()
+                            .next()
+                            .unwrap()
+                            .unwrap()
+                            .iter()
+                            .count();
             //reset the reader
             reader.seek(Position::new())?;
             (0..len).into_iter().for_each(|num| {
@@ -201,18 +206,17 @@ impl BaseDataset {
         prettytable.printstd();
     }
     //returns the last n rows in the dataset
-    pub fn tail(&self, n: Option<usize>) -> () {
+    pub fn tail(&self, n: Option<usize>){
         let headers = self.column_names.iter().collect::<Vec<_>>();
         let len = self.len();
-        let num_rows = match n {
-            Some(value) => {
-                if value > len {
-                    5
-                } else {
-                    value
-                }
+        let num_rows = if let Some(rows) = n {
+            if rows > len {
+                5
+            } else {
+                rows
             }
-            None => 5,
+        } else {
+            5
         };
         let mut data = vec![];
         for row in len - 1..len - 1 - num_rows {
@@ -265,7 +269,7 @@ impl BaseDataset {
         let col_index = self._get_string_index(&colname);
         self.get_col_mut(col_index)
             .iter_mut()
-            .for_each(|x| function(x))
+            .for_each(function)
     }
     //applies a series of functions to a column
     pub fn pipe<F>(&mut self, colname: String, functions: &mut [F])
@@ -435,6 +439,7 @@ impl BaseDataset {
     //removes a column
     pub fn drop_col(&mut self, colname: &String) {
         let col_index = self._get_string_index(colname);
+        self.column_names.remove(col_index);
         self.data.data.remove_index(Axis(1), col_index);
     }
     //removes a row
@@ -442,9 +447,10 @@ impl BaseDataset {
         self.data.data.remove_index(Axis(0), row_index);
     }
     pub fn drop_na(&mut self, criteria: Option<usize>, row_first: bool) {
-        let delete_marker = match criteria {
-            Some(marker) => marker,
-            None => 1,
+        let delete_marker = if let Some(criteria) = criteria {
+            criteria
+        } else {
+            1
         };
         let mut culprits = Vec::new(); //have to use this cause can't borrow mutably and immutably. should be fine though
                                        //delete if the rows dont match the criteria

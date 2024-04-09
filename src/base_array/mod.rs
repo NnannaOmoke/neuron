@@ -7,7 +7,7 @@ use crate::{
     dtype::{self, DType, DTypeType},
     *,
 };
-use ndarray::{ArrayView1, ArrayViewMut1, ShapeError};
+use ndarray::{ArrayView1, ArrayViewMut1, ShapeError, iter::LanesIterMut};
 use std::io::Read;
 use thiserror::Error;
 
