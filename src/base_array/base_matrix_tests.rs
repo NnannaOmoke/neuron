@@ -1,7 +1,5 @@
-use crate::dtype::DType;
-
-use super::{base_dataset::BaseDataset, BaseMatrix};
-use crate::dtype::DType;
+use super::*;
+use crate::*;
 use csv::Reader;
 use ndarray::{arr2, Array2};
 use std::{borrow::Cow, fs::File, path::Path};
@@ -11,20 +9,6 @@ pub fn test_base_matrix_try_from_csv() {
     let data = BaseMatrix::try_from_csv(
         Reader::from_path("src/base_array/test_data/test.csv").unwrap(),
         false,
-        true,
-        b',',
-    );
-    let mut data = data.unwrap();
-    data.head(None);
-    println!("{:?}", data.columns());
-    println!("{}", data.len());
-    println!("{}", data.mode(&"age".to_string()));
-    println!("{}", data.std(&"age".to_string()));
-    data.clip("age".to_string(), 25f32.into(), 0f32.into());
-    data.head(None);
-    data.map("age".to_string(), |x|{*x = &*x * &DType::F32(2.0)});
-    data.head(None);
-    data.dtypes();
     )
     .unwrap();
     // TODO: Change if DType is changed to prioritze integer parsing.

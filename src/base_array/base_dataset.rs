@@ -235,18 +235,19 @@ impl BaseDataset {
             "{}",
             self.data
                 .get(rindex, self._get_string_index(&colname.unwrap()))
-        )
+                .unwrap()
+        );
     }
     //modify the data at a single point
     pub fn modify_point_(&mut self, rindex: usize, colname: Option<String>, new_point: DType) {
         let index = self._get_string_index(&colname.unwrap_or_default());
-        let prev = self.data.get_mut(rindex, index);
+        let mut prev = self.data.get_mut(rindex, index).unwrap();
         *prev = new_point;
     }
     //add a column to the data
     pub fn push_col(&mut self, colname: String, slice: &[DType]) {
         self.column_names.push(colname);
-        self.data.push_col(slice)
+        self.data.push_col(slice);
     }
     //iterator over column name, data pairs
     pub fn items<'s>(&'s mut self) -> Zip<Iter<String>, base_array::ColumnIter<'s>> {
@@ -488,7 +489,7 @@ impl BaseDataset {
         todo!()
     }
     pub fn push_row(&mut self, row: &[DType]) {
-        self.data.push_row(row)
+        self.data.push_row(row).unwrap()
     }
     //stack some extra rows
     pub fn vstack(&mut self, other: BaseDataset) {
