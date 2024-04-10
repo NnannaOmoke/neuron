@@ -189,7 +189,7 @@ impl BaseDataset {
         );
     }
     //modify the data at a single point
-    pub fn modify_point_(&mut self, rindex: usize, colname: Option<String>, new_point: DType) {
+    pub fn modify_point(&mut self, rindex: usize, colname: Option<String>, new_point: DType) {
         let index = self._get_string_index(&colname.unwrap_or_default());
         let prev = self.data.get_mut(rindex, index);
         *prev = new_point;
