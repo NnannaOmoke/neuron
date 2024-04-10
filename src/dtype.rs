@@ -102,17 +102,15 @@ impl DType {
             DType::None
         } else {
             if prefer_precision {
-                f64::from_str(input)
-                    .map(DType::F64)
-                    .or(f32::from_str(input).map(DType::F32))
-                    .or(u64::from_str(input).map(DType::U64))
-                    .or(u32::from_str(input).map(DType::U32))
+                u64::from_str(input)
+                    .map(DType::U64)
+                    .or(f64::from_str(input).map(DType::F64))
                     .unwrap_or_else(|_| DType::Object(input.to_string()))
             } else {
-                f32::from_str(input)
-                    .map(DType::F32)
+                u32::from_str(input)
+                    .map(DType::U32)
+                    .or(f32::from_str(input).map(DType::F32))
                     .or(f64::from_str(input).map(DType::F64))
-                    .or(u32::from_str(input).map(DType::U32))
                     .or(u64::from_str(input).map(DType::U64))
                     .unwrap_or_else(|_| DType::Object(input.to_string()))
             }

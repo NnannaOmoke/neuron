@@ -1,4 +1,4 @@
-use super::*;
+use super::{*, base_dataset::BaseDataset};
 use crate::*;
 use csv::Reader;
 use ndarray::{arr2, Array2};
@@ -62,4 +62,12 @@ fn test_transpose() {
             [DType::U32(2), DType::U32(3)],
         ])
     );
+}
+
+#[test]
+fn test_loader(){
+    let dataset = BaseDataset::from_csv(Path::new("src/base_array/test_data/diabetes.csv"), false, true, b',');
+    let mut dataset = dataset.unwrap();
+    dataset.head(None);
+    dataset.dtypes();
 }

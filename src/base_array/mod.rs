@@ -14,7 +14,7 @@ use thiserror::Error;
 #[repr(C)]
 #[derive(Clone)]
 pub(crate) struct BaseMatrix {
-    pub data: Array2<DType>,
+    data: Array2<DType>,
 }
 
 impl BaseMatrix {
@@ -40,20 +40,24 @@ impl BaseMatrix {
     pub(crate) fn get_mut_row(&mut self, rindex: usize) -> ArrayViewMut1<'_, DType> {
         self.data.row_mut(rindex)
     }
-    pub(crate) fn get(&self, rindex: usize, cindex: usize) -> Option<&DType> {
-        self.data.get((rindex, cindex))
+    pub(crate) fn get(&self, rindex: usize, cindex: usize) -> &DType {
+        self.data.get((rindex, cindex)).unwrap()
     }
-    pub(crate) fn get_mut(&mut self, rindex: usize, cindex: usize) -> Option<&mut DType> {
-        self.data.get_mut((rindex, cindex))
+    pub(crate) fn get_mut(&mut self, rindex: usize, cindex: usize) -> &mut DType {
+        self.data.get_mut((rindex, cindex)).unwrap()
     }
     pub(crate) fn len(&self) -> usize {
         self.data.nrows()
     }
-    pub(crate) fn push_col(&mut self, slice: &[DType]) -> Result<(), ShapeError> {
-        self.data.push_column(slice.into())
+    pub(crate) fn push_col(&mut self, slice: &[DType]) {
+        self.data
+            .push_column(slice.into())
+            .expect("Shape is not compatible")
     }
-    pub(crate) fn push_row(&mut self, slice: &[DType]) -> Result<(), ShapeError> {
-        self.data.push_row(slice.into())
+    pub(crate) fn push_row(&mut self, slice: &[DType]) {
+        self.data
+            .push_row(slice.into())
+            .expect("Incompatible shapes!")
     }
     pub(crate) fn pop_col(&mut self) -> &[DType] {
         todo!()
@@ -74,6 +78,7 @@ impl BaseMatrix {
     ) -> Result<Self, Error> {
         // The nice thing about this code is that we don't have to check col sizes; `csv` does this
         // automatically.
+        let has_headers = reader.has_headers();
         let mut col_types = Vec::new();
         let mut row = Vec::new();
         let mut records = reader.into_records();
@@ -101,10 +106,16 @@ impl BaseMatrix {
                 if found_data_type == expected_data_type {
                     row[i] = dtype;
                 } else {
-                    return Err(Error::MismatchedDTypes {
-                        expected_data_type,
-                        found_data_type,
-                    });
+                    if !has_headers{
+                        let dtype = DType::cast(&dtype, col_types[i]).unwrap();
+                        row[i] = dtype;
+                    }
+                   //if it is not the expected data type go back and reparse
+                   else{
+                        for elem in arr.column_mut(i as usize){
+                            *elem = DType::cast(&*elem, found_data_type).unwrap();
+                        }
+                   }
                 }
             }
             arr.push_row(ArrayView1::from(&row))?;

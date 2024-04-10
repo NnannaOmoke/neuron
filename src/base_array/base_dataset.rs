@@ -235,13 +235,12 @@ impl BaseDataset {
             "{}",
             self.data
                 .get(rindex, self._get_string_index(&colname.unwrap()))
-                .unwrap()
         );
     }
     //modify the data at a single point
     pub fn modify_point_(&mut self, rindex: usize, colname: Option<String>, new_point: DType) {
         let index = self._get_string_index(&colname.unwrap_or_default());
-        let mut prev = self.data.get_mut(rindex, index).unwrap();
+        let prev = self.data.get_mut(rindex, index);
         *prev = new_point;
     }
     //add a column to the data
@@ -263,7 +262,7 @@ impl BaseDataset {
         self.data.rows()
     }
     //applies a function to a column
-    pub fn map<F>(&mut self, colname: String, mut function: F)
+    pub fn map<F>(&mut self, colname: String, function: F)
     where
         F: FnMut(&mut DType),
     {
@@ -489,7 +488,7 @@ impl BaseDataset {
         todo!()
     }
     pub fn push_row(&mut self, row: &[DType]) {
-        self.data.push_row(row).unwrap()
+        self.data.push_row(row)
     }
     //stack some extra rows
     pub fn vstack(&mut self, other: BaseDataset) {
