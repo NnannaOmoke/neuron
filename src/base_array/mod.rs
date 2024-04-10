@@ -7,7 +7,7 @@ use crate::{
     dtype::{self, DType, DTypeType},
     *,
 };
-use ndarray::{ArrayView1, ArrayViewMut1, ShapeError, iter::LanesIterMut};
+use ndarray::{iter::LanesIterMut, ArrayView1, ArrayViewMut1, ShapeError};
 use std::io::Read;
 use thiserror::Error;
 
@@ -106,16 +106,16 @@ impl BaseMatrix {
                 if found_data_type == expected_data_type {
                     row[i] = dtype;
                 } else {
-                    if !has_headers && col_types[i] == DTypeType::Object{
+                    if !has_headers && col_types[i] == DTypeType::Object {
                         let dtype = DType::cast(&dtype, col_types[i]).unwrap();
                         row[i] = dtype;
                     }
-                   //if it is not the expected data type go back and reparse
-                   else{
-                        for elem in arr.column_mut(i as usize){
+                    //if it is not the expected data type go back and reparse
+                    else {
+                        for elem in arr.column_mut(i as usize) {
                             *elem = DType::cast(&*elem, found_data_type).unwrap();
                         }
-                   }
+                    }
                 }
             }
             arr.push_row(ArrayView1::from(&row))?;

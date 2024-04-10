@@ -47,12 +47,7 @@ impl BaseDataset {
                 .collect();
         } else {
             //we need to get the length of the reader
-            let len = reader.records()
-                            .next()
-                            .unwrap()
-                            .unwrap()
-                            .iter()
-                            .count();
+            let len = reader.records().next().unwrap().unwrap().iter().count();
             //reset the reader
             reader.seek(Position::new())?;
             (0..len).into_iter().for_each(|num| {
@@ -116,56 +111,12 @@ impl BaseDataset {
         }
         println!("]");
     }
-    //return an estimate of the memory usage of each colunm in bytes
-    pub fn memory_usage(&self) -> Vec<usize> {
-        let mut return_val = Vec::new();
-        let (num_cols, num_rows) = self.data.shape();
-        //couldnt find the colunm iterator
-        for col_index in 0..num_cols {
-            let col = self.data.get_col(col_index);
-            if num_rows == 0 {
-                return_val.push(0);
-            } else {
-                let size = match &col[0] {
-                    DType::Object(_) => {
-                        //for strings we want to check the all elements
-                        let mut col_size = 0usize;
-                        for elem in col {
-                            col_size += elem.type_size();
-                        }
-                        col_size
-                    }
-                    other => other.type_size() * num_rows,
-                };
-                return_val.push(size);
-            }
-        }
-        return_val
-    }
     //return an estimate of the memory usage of the entire dataset
     pub fn total_memory_usage(&self) -> usize {
-        let mut return_val = 0usize;
-        let (num_cols, num_rows) = self.data.shape();
-        if num_rows != 0 {
-            for col_index in 0..num_cols {
-                let col = self.data.get_col(col_index);
-                {
-                    let size = match &col[0] {
-                        DType::Object(_) => {
-                            //for strings we want to check the all elements
-                            let mut col_size = 0usize;
-                            for elem in col {
-                                col_size += elem.type_size();
-                            }
-                            col_size
-                        }
-                        other => other.type_size() * num_rows,
-                    };
-                    return_val += size;
-                }
-            }
-        }
-        return_val
+        let mut value = 0;
+        self.rows()
+            .for_each(|r| r.iter().for_each(|e| value += e.type_size()));
+        value
     }
     //returns the number of dimensions of the dataset
     #[inline]
@@ -195,7 +146,7 @@ impl BaseDataset {
             .data
             .rows()
             .take(n.unwrap_or(5))
-            .map(|x| Vec::from(x.as_slice().unwrap()))
+            .map(|x| x.clone().to_vec())
             .collect();
         //we have the headers and the data, now we just use a pretty print macro
         let mut prettytable = prettytable::Table::new();
@@ -206,7 +157,7 @@ impl BaseDataset {
         prettytable.printstd();
     }
     //returns the last n rows in the dataset
-    pub fn tail(&self, n: Option<usize>){
+    pub fn tail(&self, n: Option<usize>) {
         let headers = self.column_names.iter().collect::<Vec<_>>();
         let len = self.len();
         let num_rows = if let Some(rows) = n {
@@ -219,8 +170,8 @@ impl BaseDataset {
             5
         };
         let mut data = vec![];
-        for row in len - 1..len - 1 - num_rows {
-            data.push(Vec::from(self.get_row(row).as_slice().unwrap()))
+        for row in len - 1 - num_rows..len - 1 {
+            data.push(Vec::from(self.get_row(row).clone().to_vec()))
         }
         let mut table = prettytable::Table::new();
         table.add_row(headers.into());
@@ -230,11 +181,11 @@ impl BaseDataset {
         table.printstd();
     }
     //get the data at a single point
-    pub fn display_point(&self, rindex: usize, colname: Option<String>) {
+    pub fn display_point(&self, rindex: usize, colname: &'static str) {
         println!(
             "{}",
             self.data
-                .get(rindex, self._get_string_index(&colname.unwrap()))
+                .get(rindex, self._get_string_index(&colname.to_string()))
         );
     }
     //modify the data at a single point
@@ -267,9 +218,7 @@ impl BaseDataset {
         F: FnMut(&mut DType),
     {
         let col_index = self._get_string_index(&colname);
-        self.get_col_mut(col_index)
-            .iter_mut()
-            .for_each(function)
+        self.get_col_mut(col_index).iter_mut().for_each(function)
     }
     //applies a series of functions to a column
     pub fn pipe<F>(&mut self, colname: String, functions: &mut [F])
@@ -427,7 +376,7 @@ impl BaseDataset {
                 DType::U64(var) => *var as f64,
                 _ => panic!("{}", dtype::ERR_MSG_INCOMPAT_TYPES),
             })
-            .std(0.0)
+            .std(1.0)
             .into()
     }
     //std squared
@@ -490,25 +439,25 @@ impl BaseDataset {
     pub fn push_row(&mut self, row: &[DType]) {
         self.data.push_row(row)
     }
-    //stack some extra rows
+    //stack some extra cols
     pub fn vstack(&mut self, other: BaseDataset) {
         //they have the same number of columns
         assert!(self.len() == other.len());
-        self.data
-            .data
-            .append(Axis(0), other.data.data.view())
-            .expect("Conjoining the arrays failed")
+        let mut empty = Array2::from_elem((self.len(), 0), DType::None);
+        empty.append(Axis(1), self.data.data.view()).unwrap();
+        empty.append(Axis(1), other.data.data.view()).unwrap();
+        self.data = BaseMatrix{data: empty};
+        self.column_names.extend(other.column_names.iter().map(|x| x.clone()));
     }
-
-    //stack some extra columns
-    //we want to add the append the other BaseDataset columns wise. We have to assert that their lengths are the same
+    //stack some extra rows
+    //we want to add the append the other BaseDataset row (i.e. add the external dataset to the bottom of the array) wise. We have to assert that their lengths are the same
     pub fn hstack(&mut self, other: BaseDataset) {
         //they have the same number of rows
         assert!(self.column_names.len() == other.column_names.len());
-        self.data
-            .data
-            .append(Axis(1), other.data.data.view())
-            .expect("Conjoining the arrays vertically failed!")
+        let mut empty = Array2::from_elem((0, self.column_names.len()), DType::None);
+        empty.append(Axis(0), self.data.data.view()).unwrap();
+        empty.append(Axis(0), other.data.data.view()).unwrap();
+        self.data = BaseMatrix{data: empty};
     }
 
     //number of rows in the dataset
