@@ -106,7 +106,7 @@ impl BaseMatrix {
                 if found_data_type == expected_data_type {
                     row[i] = dtype;
                 } else {
-                    if !has_headers{
+                    if !has_headers && col_types[i] == DTypeType::Object{
                         let dtype = DType::cast(&dtype, col_types[i]).unwrap();
                         row[i] = dtype;
                     }

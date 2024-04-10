@@ -66,7 +66,7 @@ fn test_transpose() {
 
 #[test]
 fn test_loader(){
-    let dataset = BaseDataset::from_csv(Path::new("src/base_array/test_data/diabetes.csv"), false, true, b',');
+    let dataset = BaseDataset::from_csv(Path::new("src/base_array/test_data/diabetes.csv"), false, false, b',');
     let mut dataset = dataset.unwrap();
     dataset.head(None);
     dataset.dtypes();
