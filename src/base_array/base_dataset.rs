@@ -191,8 +191,8 @@ impl BaseDataset {
         );
     }
     //modify the data at a single point
-    pub fn modify_point_(&mut self, rindex: usize, colname: Option<&str>, new_point: DType) {
-        let index = self._get_string_index(&colname.unwrap_or_default());
+    pub fn modify_point(&mut self, rindex: usize, colname: &str, new_point: DType) {
+        let index = self._get_string_index(colname);
         let prev = self.data.get_mut(rindex, index);
         *prev = new_point;
     }
@@ -358,7 +358,13 @@ impl BaseDataset {
     pub fn quantile(&self, colname: &str, quantile: f32) -> DType {
         let quantile = (quantile * (self.len() as f32)) as usize;
         let col_index = self._get_string_index(colname);
-        let mut deepcopy = self.get_col(col_index).clone().to_vec();
+        let current = self.get_col(col_index);
+        let mut deepcopy = current.iter().filter(|x| {
+            match x{
+                DType::None => false,
+                _ => true
+            }
+        }).collect::<Vec<_>>();
         deepcopy.sort();
         deepcopy[quantile].clone()
     }
