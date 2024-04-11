@@ -1,5 +1,6 @@
 use super::{base_dataset::BaseDataset, *};
 use crate::*;
+use core::panic;
 use csv::Reader;
 use ndarray::{arr2, Array2};
 use std::{borrow::Cow, fs::File, path::Path};
@@ -17,27 +18,27 @@ pub fn test_base_matrix_try_from_csv() {
         arr2(&[
             [
                 DType::Object("adamu".to_string()),
-                DType::F32(16.0),
+                DType::U32(16),
                 DType::Object("male".to_string()),
-                DType::F32(86.4)
+                DType::U32(86)
             ],
             [
                 DType::Object("james".to_string()),
-                DType::F32(19.0),
+                DType::U32(19),
                 DType::Object("female".to_string()),
-                DType::F32(74.0)
+                DType::U32(86)
             ],
             [
                 DType::Object("nissa".to_string()),
-                DType::F32(6.0),
+                DType::U32(6),
                 DType::Object("female".to_string()),
-                DType::F32(15.0)
+                DType::U32(86)
             ],
             [
                 DType::Object("karkarot".to_string()),
-                DType::F32(893.0),
+                DType::U32(893),
                 DType::Object("saiyan".to_string()),
-                DType::F32(100.0)
+                DType::F32(86.4)
             ]
         ])
     );
@@ -66,21 +67,33 @@ fn test_transpose() {
 
 #[test]
 fn test_loader() {
-    let dataset = BaseDataset::from_csv(
-        Path::new("src/base_array/test_data/diabetes.csv"),
-        false,
-        true,
-        b',',
+    // let dataset = BaseDataset::from_csv(
+    //     Path::new("src/base_array/test_data/diabetes.csv"),
+    //     false,
+    //     true,
+    //     b',',
+    // );
+    // let mut dataset = dataset.unwrap();
+    // let other_dataset = dataset.clone();
+    // dataset.tail(None);
+    // println!("{}", dataset.std(&"Glucose".to_string()));
+    // println!("{}", dataset.total_memory_usage());
+    // println!("{}", dataset.count(&"Glucose".to_string()));
+    // //dataset.drop_col(&"Glucose".to_string());
+    // dataset.head(None);
+    // dataset.vstack(other_dataset);
+    // dataset.head(None);
+    let dataset = BaseDataset::from_matrix(
+        BaseMatrix {
+            data: arr2(&[[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]).map(|v| DType::U32(*v)),
+        },
+        vec![
+            "one".to_string(),
+            "two".to_string(),
+            "three".to_string(),
+            "four".to_string(),
+        ],
     );
-    let mut dataset = dataset.unwrap();
-    let other_dataset = dataset.clone();
-    dataset.tail(None);
-    println!("{}", dataset.std(&"Glucose".to_string()));
-    println!("{}", dataset.total_memory_usage());
-    println!("{}", dataset.count(&"Glucose".to_string()));
-    //dataset.drop_col(&"Glucose".to_string());
-    dataset.head(None);
-    dataset.vstack(other_dataset);
-    dataset.head(None);
-   
+    dbg!(dataset.sum(&"three".to_string()));
+    panic!();
 }
