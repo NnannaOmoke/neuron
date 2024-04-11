@@ -101,4 +101,7 @@ fn test_loader() {
     );
     dataset.head(None);
     dataset.dtypes();
+    println!("{:?}", dataset.total_memory_usage());
+    another_data.display_point(1063, "Pool QC");
+    println!("{}", another_data.count("Pool QC"));
 }

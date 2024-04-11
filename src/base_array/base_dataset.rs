@@ -359,12 +359,13 @@ impl BaseDataset {
         let quantile = (quantile * (self.len() as f32)) as usize;
         let col_index = self._get_string_index(colname);
         let current = self.get_col(col_index);
-        let mut deepcopy = current.iter().filter(|x| {
-            match x{
+        let mut deepcopy = current
+            .iter()
+            .filter(|x| match x {
                 DType::None => false,
-                _ => true
-            }
-        }).collect::<Vec<_>>();
+                _ => true,
+            })
+            .collect::<Vec<_>>();
         deepcopy.sort();
         deepcopy[quantile].clone()
     }
