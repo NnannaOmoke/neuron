@@ -93,7 +93,7 @@ impl DType {
     pub fn parses_to_none(input: &str) -> bool {
         matches!(
             input,
-            "na" | "NA" | "n/a" | "N/A" | "N/a" | "nan" | "NaN" | "Nan"
+            "na" | "NA" | "n/a" | "N/A" | "N/a" | "nan" | "NaN" | "Nan" | "" | "NULL"
         )
     }
 

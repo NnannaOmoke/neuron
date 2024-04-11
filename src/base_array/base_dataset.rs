@@ -1,3 +1,5 @@
+use ndarray::Array1;
+
 use super::*;
 use crate::*;
 //this will be the dataset visible to the external users
@@ -132,7 +134,7 @@ impl BaseDataset {
         self.data.shape()
     }
     //cast all elements in a column to that of another dtype
-    pub fn astype(&mut self, colname: String, dtype: DTypeType) -> Result<(), dtype::Error> {
+    pub fn astype(&mut self, colname: &str, dtype: DTypeType) -> Result<(), dtype::Error> {
         let col_index = self._get_string_index(&colname);
         for elem in self.get_col_mut(col_index) {
             *elem = elem.cast(dtype)?;
@@ -181,7 +183,7 @@ impl BaseDataset {
         table.printstd();
     }
     //get the data at a single point
-    pub fn display_point(&self, rindex: usize, colname: &'static str) {
+    pub fn display_point(&self, rindex: usize, colname: &str) {
         println!(
             "{}",
             self.data
@@ -189,14 +191,14 @@ impl BaseDataset {
         );
     }
     //modify the data at a single point
-    pub fn modify_point_(&mut self, rindex: usize, colname: Option<String>, new_point: DType) {
+    pub fn modify_point_(&mut self, rindex: usize, colname: Option<&str>, new_point: DType) {
         let index = self._get_string_index(&colname.unwrap_or_default());
         let prev = self.data.get_mut(rindex, index);
         *prev = new_point;
     }
     //add a column to the data
-    pub fn push_col(&mut self, colname: String, slice: &[DType]) {
-        self.column_names.push(colname);
+    pub fn push_col(&mut self, colname: &str, slice: &[DType]) {
+        self.column_names.push(colname.to_string());
         self.data.push_col(slice);
     }
     //iterator over column name, data pairs
@@ -213,7 +215,7 @@ impl BaseDataset {
         self.data.rows()
     }
     //applies a function to a column
-    pub fn map<F>(&mut self, colname: String, function: F)
+    pub fn map<F>(&mut self, colname: &str, function: F)
     where
         F: FnMut(&mut DType),
     {
@@ -221,7 +223,7 @@ impl BaseDataset {
         self.get_col_mut(col_index).iter_mut().for_each(function)
     }
     //applies a series of functions to a column
-    pub fn pipe<F>(&mut self, colname: String, functions: &mut [F])
+    pub fn pipe<F>(&mut self, colname: &str, functions: &mut [F])
     where
         F: FnMut(&mut DType),
     {
@@ -237,7 +239,7 @@ impl BaseDataset {
         }
     }
     //clips the values in a column between certain values
-    pub fn clip(&mut self, colname: String, upper: DType, lower: DType) {
+    pub fn clip(&mut self, colname: &str, upper: DType, lower: DType) {
         let col_index = self._get_string_index(&colname);
         for elem in self.get_col_mut(col_index) {
             if *elem > upper {
@@ -249,7 +251,7 @@ impl BaseDataset {
         }
     }
     //get the number of non null elements in the column
-    pub fn count(&self, colname: &String) -> usize {
+    pub fn count(&self, colname: &str) -> usize {
         let col_index = self._get_string_index(colname);
         self.get_col(col_index)
             .iter()
@@ -260,7 +262,7 @@ impl BaseDataset {
             .count()
     }
     //get the mean of a column
-    pub fn mean(&self, colname: &String) -> DType {
+    pub fn mean(&self, colname: &str) -> DType {
         let col_index = self._get_string_index(colname);
         let sum = self.get_col(col_index).sum();
         let len: DType = (self.len() as f32).into();
@@ -268,14 +270,14 @@ impl BaseDataset {
     }
     //get the median value of a column.
     //fuck this can be hard
-    pub fn median(&self, colname: &String) -> DType {
+    pub fn median(&self, colname: &str) -> DType {
         let col_index = self._get_string_index(colname);
         let mut deepcopy = self.get_col(col_index).clone().to_vec();
         deepcopy.sort();
         deepcopy[self.len() / 2].clone()
     }
     //get the mode of the column, i.e. most occuring element
-    pub fn mode(&self, colname: &String) -> DType {
+    pub fn mode(&self, colname: &str) -> DType {
         let col_index = self._get_string_index(colname);
         let dtypetype = DTypeType::from(self.get_col(col_index).first().unwrap());
         match dtypetype {
@@ -319,7 +321,7 @@ impl BaseDataset {
         }
     }
     //smallest element in the column
-    pub fn min(&self, colname: &String) -> DType {
+    pub fn min(&self, colname: &str) -> DType {
         let col_index = self._get_string_index(colname);
         self.get_col(col_index)
             .iter()
@@ -332,7 +334,7 @@ impl BaseDataset {
             .clone()
     }
     //largest element in the column
-    pub fn max(&self, colname: &String) -> DType {
+    pub fn max(&self, colname: &str) -> DType {
         let col_index = self._get_string_index(colname);
         self.get_col(col_index)
             .iter()
@@ -345,7 +347,7 @@ impl BaseDataset {
             .clone()
     }
     //find the product of all the elements in the column
-    pub fn product(&self, colname: &String) -> DType {
+    pub fn product(&self, colname: &str) -> DType {
         let col_index = self._get_string_index(colname);
         self.get_col(col_index)
             .iter()
@@ -353,19 +355,19 @@ impl BaseDataset {
             .clone()
     }
     //find an element at a particular quantile
-    pub fn quantile(&self, colname: &String, quantile: f32) -> DType {
+    pub fn quantile(&self, colname: &str, quantile: f32) -> DType {
         let quantile = (quantile * (self.len() as f32)) as usize;
         let col_index = self._get_string_index(colname);
         let mut deepcopy = self.get_col(col_index).clone().to_vec();
         deepcopy.sort();
         deepcopy[quantile].clone()
     }
-    pub fn sum(&self, colname: &String) -> DType {
+    pub fn sum(&self, colname: &str) -> DType {
         let col_index = self._get_string_index(colname);
         self.get_col(col_index).sum()
     }
     //the population standard deviation
-    pub fn std(&self, colname: &String) -> DType {
+    pub fn std(&self, colname: &str) -> DType {
         let col_index = self._get_string_index(colname);
         //there will always be cheese
         self.get_col(col_index)
@@ -380,13 +382,13 @@ impl BaseDataset {
             .into()
     }
     //std squared
-    pub fn variance(&self, colname: &String) -> DType {
+    pub fn variance(&self, colname: &str) -> DType {
         //std^2
         let std = self.std(colname);
         return (&std * &std).into();
     }
     //removes a column
-    pub fn drop_col(&mut self, colname: &String) {
+    pub fn drop_col(&mut self, colname: &str) {
         let col_index = self._get_string_index(colname);
         self.column_names.remove(col_index);
         self.data.data.remove_index(Axis(1), col_index);
@@ -428,8 +430,8 @@ impl BaseDataset {
                     culprits.push(index);
                 }
             }
-            for elem in culprits {
-                self._raw_col_drop(elem);
+            for elem in culprits.iter().rev() {
+                self._raw_col_drop(*elem);
             }
         }
     }
@@ -446,8 +448,9 @@ impl BaseDataset {
         let mut empty = Array2::from_elem((self.len(), 0), DType::None);
         empty.append(Axis(1), self.data.data.view()).unwrap();
         empty.append(Axis(1), other.data.data.view()).unwrap();
-        self.data = BaseMatrix{data: empty};
-        self.column_names.extend(other.column_names.iter().map(|x| x.clone()));
+        self.data = BaseMatrix { data: empty };
+        self.column_names
+            .extend(other.column_names.iter().map(|x| x.clone()));
     }
     //stack some extra rows
     //we want to add the append the other BaseDataset row (i.e. add the external dataset to the bottom of the array) wise. We have to assert that their lengths are the same
@@ -457,17 +460,43 @@ impl BaseDataset {
         let mut empty = Array2::from_elem((0, self.column_names.len()), DType::None);
         empty.append(Axis(0), self.data.data.view()).unwrap();
         empty.append(Axis(0), other.data.data.view()).unwrap();
-        self.data = BaseMatrix{data: empty};
+        self.data = BaseMatrix { data: empty };
     }
 
     //number of rows in the dataset
     pub fn len(&self) -> usize {
         self.data.len()
     }
+    //merge 2 cols together
+    pub fn merge_col<F>(&mut self, left: &str, right: &str, function: F, result_name: &str)
+    where
+        F: Fn(&DType, &DType) -> DType,
+    {
+        let left_index = self._get_string_index(left);
+        let right_index = self._get_string_index(right);
+        let mut merged = Array1::from_elem((self.len(),), DType::None);
+        for (index, (left, right)) in zip(
+            self.get_col(left_index).iter(),
+            self.get_col(right_index).iter(),
+        )
+        .enumerate()
+        {
+            merged[index] = function(left, right);
+        }
+        self.data
+            .data
+            .push_column(merged.view())
+            .expect("Unexpected Shape on merge");
+        self._raw_col_drop(left_index);
+        self._raw_col_drop(right_index);
+        self.column_names.push(result_name.to_string());
+    }
+
     fn _raw_col_drop(&mut self, col_index: usize) {
+        self.column_names.remove(col_index);
         self.data.data.remove_index(Axis(1), col_index)
     }
-    fn _get_string_index(&self, colname: &String) -> usize {
+    fn _get_string_index(&self, colname: &str) -> usize {
         self.column_names
             .iter()
             .position(|x| x == colname)

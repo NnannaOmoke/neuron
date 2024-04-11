@@ -66,21 +66,39 @@ fn test_transpose() {
 
 #[test]
 fn test_loader() {
-    let dataset = BaseDataset::from_csv(
+    let mut dataset = BaseDataset::from_csv(
         Path::new("src/base_array/test_data/diabetes.csv"),
         false,
         true,
         b',',
+    )
+    .unwrap();
+    // let mut dataset = dataset.unwrap();
+    // let other_dataset = dataset.clone();
+    // dataset.tail(None);
+    // println!("{}", dataset.std(&"Glucose".to_string()));
+    // println!("{}", dataset.total_memory_usage());
+    // println!("{}", dataset.count(&"Glucose".to_string()));
+    // //dataset.drop_col(&"Glucose".to_string());
+    // dataset.head(None);
+    // dataset.vstack(other_dataset);
+    // dataset.head(None);
+
+    let another_data = BaseDataset::from_csv(
+        Path::new("src/base_array/test_data/Ames_Housing_Data.csv"),
+        false,
+        true,
+        b',',
+    )
+    .unwrap();
+    println!("{:?}", dataset.columns());
+    dataset.head(None);
+    dataset.merge_col(
+        "Glucose",
+        "BloodPressure",
+        |x, y| x * y,
+        "Glucose * BloodPressure",
     );
-    let mut dataset = dataset.unwrap();
-    let other_dataset = dataset.clone();
-    dataset.tail(None);
-    println!("{}", dataset.std(&"Glucose".to_string()));
-    println!("{}", dataset.total_memory_usage());
-    println!("{}", dataset.count(&"Glucose".to_string()));
-    //dataset.drop_col(&"Glucose".to_string());
     dataset.head(None);
-    dataset.vstack(other_dataset);
-    dataset.head(None);
-   
+    dataset.dtypes();
 }

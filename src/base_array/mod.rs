@@ -106,6 +106,7 @@ impl BaseMatrix {
                 if found_data_type == expected_data_type {
                     row[i] = dtype;
                 } else {
+                    //the user has mislabelled as not having headers when it most probably has headers
                     if !has_headers && col_types[i] == DTypeType::Object {
                         let dtype = DType::cast(&dtype, col_types[i]).unwrap();
                         row[i] = dtype;
