@@ -1,7 +1,7 @@
 use super::{base_dataset::BaseDataset, *};
 use crate::*;
 use csv::Reader;
-use ndarray::{arr2, Array2};
+use ndarray::{arr2, Array2, Array1, array};
 use std::{borrow::Cow, fs::File, path::Path};
 
 #[test]
@@ -66,7 +66,7 @@ fn test_transpose() {
 
 #[test]
 fn test_loader() {
-    let mut dataset = BaseDataset::from_csv(
+    let dataset = BaseDataset::from_csv(
         Path::new("src/base_array/test_data/diabetes.csv"),
         false,
         true,
@@ -83,25 +83,10 @@ fn test_loader() {
     // dataset.head(None);
     // dataset.vstack(other_dataset);
     // dataset.head(None);
+    println!("Memory usage with size_of_val: {}", dataset.total_memory_usage())
+}
 
-    let another_data = BaseDataset::from_csv(
-        Path::new("src/base_array/test_data/Ames_Housing_Data.csv"),
-        false,
-        true,
-        b',',
-    )
-    .unwrap();
-    println!("{:?}", dataset.columns());
-    dataset.head(None);
-    dataset.merge_col(
-        "Glucose",
-        "BloodPressure",
-        |x, y| x * y,
-        "Glucose * BloodPressure",
-    );
-    dataset.head(None);
-    dataset.dtypes();
-    println!("{:?}", dataset.total_memory_usage());
-    another_data.display_point(1063, "Pool QC");
-    println!("{}", another_data.count("Pool QC"));
+#[test]
+fn test_col_type(){
+
 }

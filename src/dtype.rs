@@ -2,7 +2,8 @@ use super::*;
 use crate::*;
 
 pub const ERR_MSG_INCOMPAT_TYPES: &'static str =
-    "Attempt to perform numeric operation on imcompatible types!";
+    "Attempt to perform numeric operation on incompatible types!";
+
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, FloatEq)]
 pub enum DType {
@@ -67,7 +68,7 @@ impl DType {
     }
     #[inline]
     pub fn type_size(&self) -> usize {
-        mem::size_of_val(&self)
+        mem::size_of_val(self)
     }
     pub fn abs(&mut self) {
         match self {
