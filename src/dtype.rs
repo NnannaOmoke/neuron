@@ -12,7 +12,7 @@ pub enum DType {
     U64(u64),
     F32(f32),
     F64(f64),
-    Object(String),
+    Object(Box<String>),
 }
 
 impl DType {
@@ -27,7 +27,7 @@ impl DType {
                 DTypeType::U64 => Ok(DType::U64(*value as u64)),
                 DTypeType::F32 => Ok(DType::F32(*value)),
                 DTypeType::F64 => Ok(DType::F64(*value as f64)),
-                DTypeType::Object => Ok(DType::Object(value.to_string())),
+                DTypeType::Object => Ok(DType::Object(Box::new(value.to_string()))),
             },
             DType::F64(value) => match rhs {
                 DTypeType::None => Ok(DType::None),
@@ -35,7 +35,7 @@ impl DType {
                 DTypeType::U64 => Ok(DType::U64(*value as u64)),
                 DTypeType::F32 => Ok(DType::F32(*value as f32)),
                 DTypeType::F64 => Ok(DType::F64(*value)),
-                DTypeType::Object => Ok(DType::Object(value.to_string())),
+                DTypeType::Object => Ok(DType::Object(Box::new(value.to_string()))),
             },
             DType::U32(value) => match rhs {
                 DTypeType::None => Ok(DType::None),
@@ -43,7 +43,7 @@ impl DType {
                 DTypeType::U64 => Ok(DType::U64(*value as u64)),
                 DTypeType::F32 => Ok(DType::F32(*value as f32)),
                 DTypeType::F64 => Ok(DType::F64(*value as f64)),
-                DTypeType::Object => Ok(DType::Object(value.to_string())),
+                DTypeType::Object => Ok(DType::Object(Box::new(value.to_string()))),
             },
             DType::U64(value) => match rhs {
                 DTypeType::None => Ok(DType::None),
@@ -51,7 +51,7 @@ impl DType {
                 DTypeType::U64 => Ok(DType::U64(*value)),
                 DTypeType::F32 => Ok(DType::F32(*value as f32)),
                 DTypeType::F64 => Ok(DType::F64(*value as f64)),
-                DTypeType::Object => Ok(DType::Object(value.to_string())),
+                DTypeType::Object => Ok(DType::Object(Box::new(value.to_string()))),
             },
             DType::Object(value) => match rhs {
                 DTypeType::None => Ok(DType::None),
@@ -59,7 +59,7 @@ impl DType {
                 DTypeType::U64 => Ok(DType::U64(str::parse::<u64>(value)?)),
                 DTypeType::F32 => Ok(DType::F32(str::parse::<f32>(value)?)),
                 DTypeType::F64 => Ok(DType::F64(str::parse::<f64>(value)?)),
-                DTypeType::Object => Ok(DType::Object(value.to_string())),
+                DTypeType::Object => Ok(DType::Object(Box::new(value.to_string()))),
             },
         }
     }
@@ -96,14 +96,14 @@ impl DType {
                 u64::from_str(input)
                     .map(DType::U64)
                     .or(f64::from_str(input).map(DType::F64))
-                    .unwrap_or_else(|_| DType::Object(input.to_string()))
+                    .unwrap_or_else(|_| DType::Object(Box::new(input.to_string())))
             } else {
                 u32::from_str(input)
                     .map(DType::U32)
                     .or(f32::from_str(input).map(DType::F32))
                     .or(f64::from_str(input).map(DType::F64))
                     .or(u64::from_str(input).map(DType::U64))
-                    .unwrap_or_else(|_| DType::Object(input.to_string()))
+                    .unwrap_or_else(|_| DType::Object(Box::new(input.to_string())))
             }
         }
     }
@@ -150,8 +150,11 @@ impl Add<DType> for DType {
                 F64(r) => F64(l + r),
                 Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
-            Object(l) => match rhs {
-                Object(r) => Object(l + &r),
+            Object(mut l) => match rhs {
+                Object(r) => {
+                    l.push_str(&r);
+                    Object(l)
+                },
                 _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
         }
@@ -199,8 +202,11 @@ impl Add<&DType> for DType {
                 F64(r) => F64(l + r),
                 Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
-            Object(l) => match rhs {
-                Object(r) => Object(l + r),
+            Object(mut l) => match rhs {
+                Object(r) => {
+                    l.push_str(r);
+                    Object(l)
+                },
                 _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
         }
@@ -248,7 +254,7 @@ impl Add<&DType> for &DType {
                 Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             Object(l) => match rhs {
-                Object(r) => Object(l.clone() + r),
+                Object(r) => Object(Box::new(l.as_ref().clone() + r)),
                 _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
         }
@@ -385,8 +391,11 @@ impl Mul<&DType> for DType {
                 F64(r) => F64(l * r),
                 Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
-            Object(l) => match rhs {
-                Object(r) => Object(l + r),
+            Object(mut l) => match rhs {
+                Object(r) => {
+                    l.push_str(r);
+                    Object(l)
+                },
                 _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
         }
@@ -434,7 +443,7 @@ impl Mul<&DType> for &DType {
                 Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
             Object(l) => match rhs {
-                Object(r) => Object(l.clone() + r),
+                Object(r) => Object(Box::new(l.as_ref().clone() + r)),
                 _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
         }
@@ -740,15 +749,15 @@ impl From<usize> for DType {
     }
 }
 
-impl From<String> for DType {
-    fn from(value: String) -> Self {
+impl From<Box<String>> for DType {
+    fn from(value: Box<String>) -> Self {
         DType::Object(value)
     }
 }
 
 impl From<&str> for DType {
     fn from(value: &str) -> Self {
-        DType::Object(value.to_string())
+        DType::Object(Box::new(value.to_string()))
     }
 }
 
