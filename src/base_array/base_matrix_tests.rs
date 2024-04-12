@@ -17,27 +17,27 @@ pub fn test_base_matrix_try_from_csv() {
         data.data,
         arr2(&[
             [
-                DType::Object("adamu".to_string()),
+                DType::Object(Box::new("adamu".to_string())),
                 DType::U32(16),
-                DType::Object("male".to_string()),
+                DType::Object(Box::new("male".to_string())),
                 DType::U32(86)
             ],
             [
-                DType::Object("james".to_string()),
+                DType::Object(Box::new("james".to_string())),
                 DType::U32(19),
-                DType::Object("female".to_string()),
+                DType::Object(Box::new("female".to_string())),
                 DType::U32(86)
             ],
             [
-                DType::Object("nissa".to_string()),
+                DType::Object(Box::new("nissa".to_string())),
                 DType::U32(6),
-                DType::Object("female".to_string()),
+                DType::Object(Box::new("female".to_string())),
                 DType::U32(86)
             ],
             [
-                DType::Object("karkarot".to_string()),
+                DType::Object(Box::new("karkarot".to_string())),
                 DType::U32(893),
-                DType::Object("saiyan".to_string()),
+                DType::Object(Box::new("saiyan".to_string())),
                 DType::F32(86.4)
             ]
         ])
@@ -73,16 +73,6 @@ fn test_loader() {
     //     true,
     //     b',',
     // );
-    // let mut dataset = dataset.unwrap();
-    // let other_dataset = dataset.clone();
-    // dataset.tail(None);
-    // println!("{}", dataset.std(&"Glucose".to_string()));
-    // println!("{}", dataset.total_memory_usage());
-    // println!("{}", dataset.count(&"Glucose".to_string()));
-    // //dataset.drop_col(&"Glucose".to_string());
-    // dataset.head(None);
-    // dataset.vstack(other_dataset);
-    // dataset.head(None);
     let dataset = BaseDataset::from_matrix(
         BaseMatrix {
             data: arr2(&[[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]).map(|v| DType::U32(*v)),

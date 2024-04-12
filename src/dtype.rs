@@ -62,23 +62,13 @@ impl DType {
             },
         }
     }
-
     pub fn data_type(&self) -> DTypeType {
         DTypeType::from(self)
     }
-
     #[inline]
     pub fn type_size(&self) -> usize {
-        match self {
-            DType::None => 1,
-            DType::F32(_) => mem::size_of::<DType>(),
-            DType::F64(_) => mem::size_of::<DType>(),
-            DType::U32(_) => mem::size_of::<DType>(),
-            DType::U64(_) => mem::size_of::<DType>(),
-            DType::Object(data) => mem::size_of::<DType>() + data.len(),
-        }
+        mem::size_of_val(&self)
     }
-
     pub fn abs(&mut self) {
         match self {
             DType::None => {}
@@ -93,7 +83,7 @@ impl DType {
     pub fn parses_to_none(input: &str) -> bool {
         matches!(
             input,
-            "na" | "NA" | "n/a" | "N/A" | "N/a" | "nan" | "NaN" | "Nan"
+            "na" | "NA" | "n/a" | "N/A" | "N/a" | "nan" | "NaN" | "Nan" | "" | "NULL"
         )
     }
 

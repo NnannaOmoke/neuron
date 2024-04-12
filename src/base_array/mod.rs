@@ -99,21 +99,28 @@ impl BaseMatrix {
             let record = record_res?;
             for (i, field) in record.into_iter().enumerate() {
                 let dtype = DType::parse_from_str(field.trim(), prefer_precision);
-                // SAFETY: If the record we got had a different number of fields, the read method would
-                // have failed based on the way the csv Reader works.
                 let expected_data_type = row[i].data_type();
                 let found_data_type = dtype.data_type();
                 if found_data_type == expected_data_type {
                     row[i] = dtype;
                 } else {
+                    //the user has mislabelled as not having headers when it most probably has headers
                     if !has_headers && col_types[i] == DTypeType::Object {
                         let dtype = DType::cast(&dtype, col_types[i]).unwrap();
                         row[i] = dtype;
+                    } else if expected_data_type == DTypeType::None
+                        || found_data_type == DTypeType::None
+                    {
+                        row[i] = dtype;
                     }
-                    //if it is not the expected data type go back and reparse
+                    //recast that's breaking everything in terms of NaN values
                     else {
                         for elem in arr.column_mut(i as usize) {
-                            *elem = DType::cast(&*elem, found_data_type).unwrap();
+                            if elem.data_type() == DTypeType::None {
+                            } else {
+                                *elem = DType::cast(&*elem, found_data_type).unwrap()
+                            }
+                            //otherwise it's not supposed to cast. why aren't the strings being rendered?
                         }
                     }
                 }
