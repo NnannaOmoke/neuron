@@ -73,16 +73,6 @@ fn test_loader() {
         b',',
     )
     .unwrap();
-    // let mut dataset = dataset.unwrap();
-    // let other_dataset = dataset.clone();
-    // dataset.tail(None);
-    // println!("{}", dataset.std(&"Glucose".to_string()));
-    // println!("{}", dataset.total_memory_usage());
-    // println!("{}", dataset.count(&"Glucose".to_string()));
-    // //dataset.drop_col(&"Glucose".to_string());
-    // dataset.head(None);
-    // dataset.vstack(other_dataset);
-    // dataset.head(None);
     println!("Memory usage with size_of_val: {}", dataset.total_memory_usage())
 }
 
