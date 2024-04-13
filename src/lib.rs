@@ -4,7 +4,7 @@
 
 pub mod base_array;
 pub mod dtype;
-
+pub mod linear_models;
 //All imports are defined here and made (pub)crate
 pub(crate) use core::{
     fmt,
