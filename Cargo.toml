@@ -16,6 +16,7 @@ num-order = "1.2.0"
 num-traits = "0.2.18"
 ordered-float = "4.2.0"
 prettytable = "0.10.0"
+rand = "0.8.5"
 thiserror = "1.0.58"
 
 [dev-dependencies]

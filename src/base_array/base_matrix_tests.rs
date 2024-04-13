@@ -2,7 +2,7 @@ use super::{base_dataset::BaseDataset, *};
 use crate::*;
 use core::panic;
 use csv::Reader;
-use ndarray::{arr2, Array2, Array1, array};
+use ndarray::{arr2, array, Array1, Array2};
 use std::{borrow::Cow, fs::File, path::Path};
 
 #[test]
