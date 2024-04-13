@@ -17,8 +17,8 @@ impl LinearRegressorBuilder {
         Self {
             weights: vec![],
             bias: 0f64,
-            learning_rate: 0f64,
-            num_iters: 0,
+            learning_rate: 0.01f64,
+            num_iters: 1000,
         }
     }
 
