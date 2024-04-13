@@ -3,7 +3,7 @@ use core::num;
 use num_traits::ToPrimitive;
 use rand::random;
 
-use crate::base_array::{base_dataset::BaseDataset, BaseMatrix};
+use crate::{base_array::{base_dataset::BaseDataset, BaseMatrix}, dtype::DType};
 
 pub(crate) struct LinearRegressorBuilder {
     weights: Vec<f64>,
@@ -78,6 +78,30 @@ impl LinearRegressorBuilder {
     pub fn weights(&self) -> &Vec<f64> {
         &self.weights
     }
+
+    fn normalize(dataset: &mut BaseDataset, standardizer: Standardizer, targetcol: usize){
+        match standardizer{
+            Standardizer::MinMax => {
+                let mins = dataset.columns().iter().enumerate().filter(|x| x.0!= targetcol).map(|x| dataset.min(x.1)).collect::<Vec<DType>>();
+                let maxs = dataset.columns().iter().enumerate().filter(|x| x.0!= targetcol).map(|x| dataset.max(x.1)).collect::<Vec<DType>>();
+
+                for (index, mut col) in dataset.cols_mut().into_iter().enumerate(){
+                    for elem in col.iter_mut(){
+                        *elem  = (&*elem - &mins[index])/(&maxs[index]- &mins[index])
+                    }
+                }
+            },
+            Standardizer::ZScore =>{
+                unimplemented!()
+            }
+        }
+
+    }
+}
+
+enum Standardizer{
+    MinMax,
+    ZScore
 }
 
 #[cfg(test)]
