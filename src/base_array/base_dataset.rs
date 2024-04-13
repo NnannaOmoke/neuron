@@ -498,6 +498,10 @@ impl BaseDataset {
         self._raw_col_drop(right_index);
         self.column_names.push(result_name.to_string());
     }
+
+    pub(crate) fn get(&self, rowindex: usize, colindex: usize) -> &DType{
+        self.data.get(rowindex, colindex)
+    }
     fn _raw_col_drop(&mut self, col_index: usize) {
         self.column_names.remove(col_index);
         self.data.data.remove_index(Axis(1), col_index)

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod base_matrix_tests;
 
-mod base_dataset;
+pub mod base_dataset;
 
 use crate::{
     dtype::{self, DType, DTypeType},

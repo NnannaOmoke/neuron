@@ -3,7 +3,7 @@ use core::num;
 use num_traits::ToPrimitive;
 use rand::random;
 
-use crate::base_array::BaseMatrix;
+use crate::base_array::{base_dataset::BaseDataset, BaseMatrix};
 
 pub(crate) struct LinearRegressorBuilder {
     weights: Vec<f64>,
@@ -13,8 +13,17 @@ pub(crate) struct LinearRegressorBuilder {
 }
 
 impl LinearRegressorBuilder {
+    fn new() -> Self{
+        Self{
+            weights: vec![],
+            bias: 0f64,
+            learning_rate: 0f64,
+            num_iters: 0
+        }
+    }
+
     fn all_colunms_dot(
-        dataset: &BaseMatrix,
+        dataset: &BaseDataset,
         target_col: usize,
         dataset_index: usize,
         weights: &Vec<f64>,
@@ -31,7 +40,7 @@ impl LinearRegressorBuilder {
         }
         result
     }
-    fn fit(mut self, dataset: &BaseMatrix, target_col: usize) {
+    fn fit(&mut self, dataset: &BaseDataset, target_col: usize) {
         //if theres logic errors its probable in colunm_dot or because i mixed row and colunm somewhere
         let num_weights = dataset.shape().1 - 1;
         let n = dataset.shape().0;
@@ -69,5 +78,22 @@ impl LinearRegressorBuilder {
                 self.weights[i] -= dws[i] * self.learning_rate;
             }
         }
+    }
+
+    pub fn weights(&self) -> &Vec<f64>{
+        &self.weights
+    } 
+}
+
+#[cfg(test)]
+mod tests{
+    use crate::*;
+    use super::*;
+    #[test]
+    fn test_convergence(){
+        let dataset = base_array::base_dataset::BaseDataset::from_csv(Path::new("src/base_array/test_data/boston.csv"), true, true, b',').unwrap();
+        let mut learner = LinearRegressorBuilder::new();
+        learner.fit(&dataset, 13);
+        println!("{:?}",learner.weights())
     }
 }
