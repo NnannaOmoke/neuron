@@ -499,7 +499,7 @@ impl BaseDataset {
         self.column_names.push(result_name.to_string());
     }
 
-    pub(crate) fn get(&self, rowindex: usize, colindex: usize) -> &DType{
+    pub(crate) fn get(&self, rowindex: usize, colindex: usize) -> &DType {
         self.data.get(rowindex, colindex)
     }
     fn _raw_col_drop(&mut self, col_index: usize) {

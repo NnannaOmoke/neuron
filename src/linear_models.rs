@@ -13,12 +13,12 @@ pub(crate) struct LinearRegressorBuilder {
 }
 
 impl LinearRegressorBuilder {
-    fn new() -> Self{
-        Self{
+    fn new() -> Self {
+        Self {
             weights: vec![],
             bias: 0f64,
             learning_rate: 0f64,
-            num_iters: 0
+            num_iters: 0,
         }
     }
 
@@ -54,12 +54,7 @@ impl LinearRegressorBuilder {
             for dataset_index in 0..n {
                 //I couldn't figure out how to use ndarray's dot while skipping a colunm
                 let error = self.bias
-                    + LinearRegressorBuilder::all_colunms_dot(
-                        dataset,
-                        target_col,
-                        dataset_index,
-                        &self.weights,
-                    )
+                    + Self::all_colunms_dot(dataset, target_col, dataset_index, &self.weights)
                     - dataset.get(dataset_index, target_col).to_f64().unwrap();
                 let mut col_index = 0usize;
                 for dw in &mut dws {
@@ -80,20 +75,26 @@ impl LinearRegressorBuilder {
         }
     }
 
-    pub fn weights(&self) -> &Vec<f64>{
+    pub fn weights(&self) -> &Vec<f64> {
         &self.weights
-    } 
+    }
 }
 
 #[cfg(test)]
-mod tests{
-    use crate::*;
+mod tests {
     use super::*;
+    use crate::*;
     #[test]
-    fn test_convergence(){
-        let dataset = base_array::base_dataset::BaseDataset::from_csv(Path::new("src/base_array/test_data/boston.csv"), true, true, b',').unwrap();
+    fn test_convergence() {
+        let dataset = base_array::base_dataset::BaseDataset::from_csv(
+            Path::new("src/base_array/test_data/boston.csv"),
+            true,
+            true,
+            b',',
+        )
+        .unwrap();
         let mut learner = LinearRegressorBuilder::new();
         learner.fit(&dataset, 13);
-        println!("{:?}",learner.weights())
+        println!("{:?}", learner.weights())
     }
 }
