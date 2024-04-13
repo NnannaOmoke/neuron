@@ -2,7 +2,7 @@ use super::{base_dataset::BaseDataset, *};
 use crate::*;
 use core::panic;
 use csv::Reader;
-use ndarray::{arr2, Array2, Array1, array};
+use ndarray::{arr2, array, Array1, Array2};
 use std::{borrow::Cow, fs::File, path::Path};
 
 #[test]
@@ -86,4 +86,16 @@ fn test_loader() {
     );
     dbg!(dataset.sum(&"three".to_string()));
     panic!();
+}
+
+#[test]
+fn mem_usage() {
+    let data = BaseDataset::from_csv(
+        Path::new("src/base_array/test_data/Ames_Housing_Data.csv"),
+        false,
+        true,
+        b',',
+    )
+    .unwrap();
+    dbg!(data.total_memory_usage());
 }

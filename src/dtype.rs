@@ -4,7 +4,7 @@ use crate::*;
 pub const ERR_MSG_INCOMPAT_TYPES: &'static str =
     "Attempt to perform numeric operation on incompatible types!";
 
-
+#[repr(u8)]
 #[derive(Debug, PartialEq, PartialOrd, Clone, FloatEq)]
 pub enum DType {
     None,
@@ -154,7 +154,7 @@ impl Add<DType> for DType {
                 Object(r) => {
                     l.push_str(&r);
                     Object(l)
-                },
+                }
                 _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
         }
@@ -206,7 +206,7 @@ impl Add<&DType> for DType {
                 Object(r) => {
                     l.push_str(r);
                     Object(l)
-                },
+                }
                 _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
         }
@@ -395,7 +395,7 @@ impl Mul<&DType> for DType {
                 Object(r) => {
                     l.push_str(r);
                     Object(l)
-                },
+                }
                 _ => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             },
         }
