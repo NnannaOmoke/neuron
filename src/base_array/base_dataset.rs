@@ -502,15 +502,30 @@ impl BaseDataset {
     pub(crate) fn get(&self, rowindex: usize, colindex: usize) -> &DType {
         self.data.get(rowindex, colindex)
     }
-    fn _raw_col_drop(&mut self, col_index: usize) {
+    pub(crate) fn _raw_col_drop(&mut self, col_index: usize) {
         self.column_names.remove(col_index);
         self.data.data.remove_index(Axis(1), col_index)
     }
-    fn _get_string_index(&self, colname: &str) -> usize {
+    pub(crate) fn _get_string_index(&self, colname: &str) -> usize {
         self.column_names
             .iter()
             .position(|x| x == colname)
             .expect("Column name was not found")
+    }
+    pub(crate) fn get_ndarray(&self) -> Array2<DType> {
+        self.data.data.clone()
+    }
+    pub(crate) fn into_f64_array(&self, target: usize) -> Array2<f64> {
+        let mut data = Array2::from_elem((self.data.shape().0, 0usize), 0f64);
+        for (index, col) in self.cols().enumerate() {
+            if index == target {
+                continue;
+            }
+            data.push_column(col.map(|x| x.to_f64().unwrap()).view())
+                .unwrap();
+        }
+        println!("{:?}", data.shape());
+        data
     }
 }
 

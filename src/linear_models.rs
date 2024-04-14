@@ -1,9 +1,13 @@
 use core::num;
 
+use ndarray::{s, Array1, Array2};
 use num_traits::ToPrimitive;
-use rand::random;
+use rand::{random, thread_rng, Rng};
 
-use crate::{base_array::{base_dataset::BaseDataset, BaseMatrix}, dtype::DType};
+use crate::{
+    base_array::{base_dataset::BaseDataset, BaseMatrix},
+    dtype::DType,
+};
 
 pub(crate) struct LinearRegressorBuilder {
     weights: Vec<f64>,
@@ -17,8 +21,8 @@ impl LinearRegressorBuilder {
         Self {
             weights: vec![],
             bias: 0f64,
-            learning_rate: 0.01f64,
-            num_iters: 1000,
+            learning_rate: 0.00875f64,
+            num_iters: 30000,
         }
     }
 
@@ -79,29 +83,78 @@ impl LinearRegressorBuilder {
         &self.weights
     }
 
-    fn normalize(dataset: &mut BaseDataset, standardizer: Standardizer, targetcol: usize){
-        match standardizer{
+    fn normalize(dataset: &mut BaseDataset, standardizer: Standardizer, targetcol: usize) {
+        match standardizer {
             Standardizer::MinMax => {
-                let mins = dataset.columns().iter().enumerate().filter(|x| x.0!= targetcol).map(|x| dataset.min(x.1)).collect::<Vec<DType>>();
-                let maxs = dataset.columns().iter().enumerate().filter(|x| x.0!= targetcol).map(|x| dataset.max(x.1)).collect::<Vec<DType>>();
-
-                for (index, mut col) in dataset.cols_mut().into_iter().enumerate(){
-                    for elem in col.iter_mut(){
-                        *elem  = (&*elem - &mins[index])/(&maxs[index]- &mins[index])
+                let mins = dataset
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .filter(|x| x.0 != targetcol)
+                    .map(|x| dataset.min(x.1))
+                    .collect::<Vec<DType>>();
+                let maxs = dataset
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .filter(|x| x.0 != targetcol)
+                    .map(|x| dataset.max(x.1))
+                    .collect::<Vec<DType>>();
+                for (index, mut col) in dataset.cols_mut().into_iter().enumerate() {
+                    if index == targetcol {
+                        continue;
+                    }
+                    for elem in col.iter_mut() {
+                        *elem = (&*elem - &mins[index]) / (&maxs[index] - &mins[index])
                     }
                 }
-            },
-            Standardizer::ZScore =>{
+            }
+            Standardizer::ZScore => {
                 unimplemented!()
             }
         }
+    }
 
+    fn nfit(&mut self, dataset: &BaseDataset, target_col: &str) {
+        assert!(self.num_iters != 0);
+        let col_index = dataset._get_string_index(target_col);
+        let (nsamples, nfeatures) = dataset.shape();
+        println!("{:?}", dataset.shape());
+        let mut rng = thread_rng();
+        //turn everything
+        let x = dataset.into_f64_array(col_index);
+        let target = dataset
+            .get_col(col_index)
+            .map(|x| x.to_f64().unwrap())
+            .into_owned();
+        let mut weights = Array1::from_vec(
+            (1..nfeatures)
+                .map(|_| rng.gen::<f64>())
+                .collect::<Vec<f64>>(),
+        );
+        let mut preds = Array1::from_elem(nsamples, 0f64);
+        let mut dw = Array1::from_elem(nsamples, 0f64);
+        let mut db = 0f64;
+        for _ in 0..self.num_iters {
+            preds = x.dot(&weights) + self.bias;
+            dw = (1f64 / nsamples as f64) * (x.t().dot(&(&preds - &target)));
+            db = (1f64 / nsamples as f64) * (&preds - &target).sum();
+            weights = weights - &(self.learning_rate * dw);
+            self.bias = self.bias - self.learning_rate * db;
+        }
+        self.weights = weights.to_vec();
+    }
+
+    fn predict(&self, data: &Array2<f64>) -> Vec<f64> {
+        let mut predictions = (0..data.shape()[1]).map(|_| 0f64).collect::<Vec<f64>>();
+
+        predictions
     }
 }
 
-enum Standardizer{
+enum Standardizer {
     MinMax,
-    ZScore
+    ZScore,
 }
 
 #[cfg(test)]
@@ -110,15 +163,20 @@ mod tests {
     use crate::*;
     #[test]
     fn test_convergence() {
-        let dataset = base_array::base_dataset::BaseDataset::from_csv(
+        let mut dataset = base_array::base_dataset::BaseDataset::from_csv(
             Path::new("src/base_array/test_data/boston.csv"),
             true,
             true,
             b',',
         )
         .unwrap();
+        dataset.drop_na(None, true);
         let mut learner = LinearRegressorBuilder::new();
-        learner.fit(&dataset, 13);
-        println!("{:?}", learner.weights())
+        LinearRegressorBuilder::normalize(&mut dataset, Standardizer::MinMax, 13);
+        learner.nfit(&dataset, "MEDV");
+        println!(
+            "MAE: {}",
+            8
+        )
     }
 }
