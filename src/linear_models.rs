@@ -1,5 +1,6 @@
 use core::num;
 
+use float_derive::utils::eq;
 use ndarray::{s, Array1, Array2};
 use num_traits::ToPrimitive;
 use rand::{random, thread_rng, Rng};
@@ -7,6 +8,7 @@ use rand::{random, thread_rng, Rng};
 use crate::{
     base_array::{base_dataset::BaseDataset, BaseMatrix},
     dtype::DType,
+    *, utils::linalg::solve_linear_systems,
 };
 
 pub(crate) struct LinearRegressorBuilder {
@@ -122,7 +124,7 @@ impl LinearRegressorBuilder {
         println!("{:?}", dataset.shape());
         let mut rng = thread_rng();
         //turn everything
-        let x = dataset.into_f64_array(col_index);
+        let x = dataset.into_f64_array_without_target(col_index);
         let target = dataset
             .get_col(col_index)
             .map(|x| x.to_f64().unwrap())
@@ -150,6 +152,91 @@ impl LinearRegressorBuilder {
 
         predictions
     }
+
+    fn fitv2(&mut self, dataset: &BaseDataset, target: &str) {
+        let target_col_index = dataset._get_string_index(target);
+        let target = dataset.get_col(target_col_index);
+        let (nrows, ncols) = dataset.shape();
+        let nweights = ncols - 1; //cause we're taking in the full dataset; makes sense
+        let mut eqns = Array2::from_elem((0, ncols), 0f64); //we don't have info about the shape of this array
+        let mut first_ = Array1::from_elem(ncols, 0f64);
+        (0..ncols)
+            .filter(|index| *index != target_col_index)
+            .for_each(|index| {
+                first_[index] = dataset.get_col(index).sum().to_f64().unwrap();
+            });
+        //pushes the target col to the last in eqns; nice
+        first_[ncols - 1] = target.sum().to_f64().unwrap();
+        let nsums = ((ncols - 1) * (ncols)) / 2;
+        let mut sums: Vec<f64> = Vec::from_iter((0..nsums).map(|_| 0f64));
+        for elem in 0..nsums {
+            let mut first_col = 0;
+            let mut group_ind: isize = elem as isize;
+            loop {
+                group_ind -= nweights as isize - first_col as isize;
+                if group_ind > 0 {
+                    break;
+                }
+                first_col += 1;
+            }
+            let mut second_col =
+                (elem as isize - ((nweights as isize * 2 - first_col as isize + 1) * first_col as isize / 2)) + first_col as isize;
+            first_col = if first_col < target_col_index {
+                first_col
+            } else {
+                first_col + 1
+            };
+            second_col = if second_col < target_col_index as isize{
+                second_col
+            } else {
+                second_col + 1
+            };
+            println!("first_col: {}, second_col: {}", first_col, second_col);
+            sums[elem] = dataset
+                .get_col(first_col)
+                .map(|x| x.to_f64().unwrap())
+                .dot(&dataset.get_col(second_col as usize).map(|x| x.to_f64().unwrap()));
+        }
+        for elem in 0..nweights {
+            println!("I got here");
+            let mut current = Array1::from_elem(ncols, 0f64);
+            current[0] = eqns[(0, elem + 1)];
+            for elem_two in 0..nweights {
+                current[elem_two + 1] = sums[Self::_sum_index(elem, elem_two, nweights)];
+            }
+            let non_target_index = if elem < target_col_index {
+                elem
+            } else {
+                elem + 1
+            };
+            println!("I got here too");
+            let dot = dataset
+                .get_col(non_target_index)
+                .map(|x| x.to_f64().unwrap())
+                .dot(
+                    &dataset
+                        .get_col(target_col_index)
+                        .map(|x| x.to_f64().unwrap()),
+                );
+            current[elem + 1] = dot;
+            eqns.push_row(current.view()).expect("Shaoe error");
+        }
+
+        solve_linear_systems(&mut eqns.view_mut());
+        self.bias = eqns[(0, nweights)];
+        for elem in 1 ..= nweights{
+            self.weights[elem] = eqns[(elem, nweights)];
+        }
+    }
+
+    fn _sum_index(eqn: usize, param: usize, nweights: usize) -> usize {
+        let first = usize::min(eqn, param);
+        let second = usize::max(eqn, param);
+        let mut s_index = 0;
+        s_index = (nweights * 2 - first + 1) * first / 2;
+        s_index += second - first;
+        s_index
+    }
 }
 
 enum Standardizer {
@@ -173,10 +260,7 @@ mod tests {
         dataset.drop_na(None, true);
         let mut learner = LinearRegressorBuilder::new();
         LinearRegressorBuilder::normalize(&mut dataset, Standardizer::MinMax, 13);
-        learner.nfit(&dataset, "MEDV");
-        println!(
-            "MAE: {}",
-            8
-        )
+        learner.fitv2(&dataset, "MEDV");
+        println!("MAE: {}", 8)
     }
 }

@@ -2,3 +2,4 @@
 /benches
 *Cargo.lock
 *.vscode
+*.cpp
