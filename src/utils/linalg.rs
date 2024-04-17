@@ -21,7 +21,7 @@ pub fn forward_elimination(array: &mut ArrayViewMut2<f64>) {
 
 pub fn backward_substitution(array: &mut ArrayViewMut2<f64>) {
     let len = array.len();
-    for i in (0..=len - 1).rev() {
+    for i in (0 .. =len - 1).rev() {
         let mut sum = 0f64;
         for j in i + 1..len {
             sum += array[(i, j)] * array[(j, len)];

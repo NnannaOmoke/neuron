@@ -156,14 +156,15 @@ impl LinearRegressorBuilder {
     fn fitv2(&mut self, dataset: &BaseDataset, target: &str) {
         let target_col_index = dataset._get_string_index(target);
         let target = dataset.get_col(target_col_index);
-        let (_, ncols) = dataset.shape();
+        let (nrows, ncols) = dataset.shape();
         let nweights = ncols - 1; //cause we're taking in the full dataset; makes sense
-        let mut eqns = Array2::from_elem((0, ncols), 0f64); //we don't have info about the shape of this array
-        let mut first_ = Array1::from_elem(ncols, 0f64);
+        let mut eqns = Array2::from_elem((0, ncols + 1), 0f64); //we don't have info about the shape of this array
+        let mut first_ = Array1::from_elem(ncols + 1, 0f64);
+        first_[0] = nrows as f64;
         (0..ncols)
             .filter(|index| *index != target_col_index)
             .for_each(|index| {
-                first_[index] = dataset.get_col(index).sum().to_f64().unwrap();
+                first_[index + 1] = dataset.get_col(index).sum().to_f64().unwrap();
             });
         //pushes the target col to the last in eqns; nice
         first_[ncols - 1] = target.sum().to_f64().unwrap();
@@ -219,11 +220,11 @@ impl LinearRegressorBuilder {
                         .map(|x| x.to_f64().unwrap()),
                 );
             current.push(dot);
-            println!("Current length: {}", current.len());
             eqns.push_row(Array1::from_vec(current).view()).expect("Shape error");
         }
-
+        println!("We got here");
         solve_linear_systems(&mut eqns.view_mut());
+        println!("We passed here");
         self.bias = eqns[(0, nweights)];
         for elem in 1 ..= nweights{
             self.weights[elem] = eqns[(elem, nweights)];
