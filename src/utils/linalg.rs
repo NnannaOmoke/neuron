@@ -4,9 +4,9 @@ use super::*;
 use crate::*;
 
 pub fn forward_elimination(array: &mut ArrayViewMut2<f64>) {
-    let len = array.len();
+    let len = array.shape()[0];
     for i in 0..len - 1 {
-        for j in i + 1..len {
+        for j in (i + 1)..len {
             let pivot = array[(j, i)] / array[(i, i)];
             if pivot.abs() < 1e-10f64 {
                 eprintln!("Potential singular matrix encountered!");
@@ -20,10 +20,10 @@ pub fn forward_elimination(array: &mut ArrayViewMut2<f64>) {
 }
 
 pub fn backward_substitution(array: &mut ArrayViewMut2<f64>) {
-    let len = array.len();
-    for i in (0 .. =len - 1).rev() {
+    let len = array.shape()[0];
+    for i in (0..=(len - 1)).rev() {
         let mut sum = 0f64;
-        for j in i + 1..len {
+        for j in (i + 1)..len {
             sum += array[(i, j)] * array[(j, len)];
         }
         array[(i, len)] = (array[(i, len)] - sum) / array[(i, i)]
@@ -31,7 +31,7 @@ pub fn backward_substitution(array: &mut ArrayViewMut2<f64>) {
 }
 
 pub fn solve_linear_systems(array: &mut ArrayViewMut2<f64>) {
-    let len = array.len();
+    let len = array.shape()[0];
     if len == 0 {
         return;
     }
@@ -42,3 +42,4 @@ pub fn solve_linear_systems(array: &mut ArrayViewMut2<f64>) {
     }
     backward_substitution(array);
 }
+

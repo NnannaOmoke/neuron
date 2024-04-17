@@ -226,8 +226,9 @@ impl LinearRegressorBuilder {
         solve_linear_systems(&mut eqns.view_mut());
         println!("We passed here");
         self.bias = eqns[(0, nweights)];
+        self.weights.resize(nweights, 0f64);
         for elem in 1 ..= nweights{
-            self.weights[elem] = eqns[(elem, nweights)];
+            self.weights[elem-1] = eqns[(elem, nweights)];
         }
     }
 
@@ -261,7 +262,7 @@ mod tests {
         .unwrap();
         dataset.drop_na(None, true);
         let mut learner = LinearRegressorBuilder::new();
-        LinearRegressorBuilder::normalize(&mut dataset, Standardizer::MinMax, 13);
+        //LinearRegressorBuilder::normalize(&mut dataset, Standardizer::MinMax, 13);
         learner.fitv2(&dataset, "MEDV");
         println!("MAE: {}", 8)
     }
