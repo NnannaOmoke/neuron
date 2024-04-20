@@ -8,7 +8,8 @@ use rand::{random, thread_rng, Rng};
 use crate::{
     base_array::{base_dataset::BaseDataset, BaseMatrix},
     dtype::DType,
-    *, utils::linalg::solve_linear_systems,
+    utils::linalg::{dot, solve_linear_systems},
+    *,
 };
 
 pub(crate) struct LinearRegressorBuilder {
@@ -85,9 +86,9 @@ impl LinearRegressorBuilder {
         &self.weights
     }
 
-    fn normalize(dataset: &mut BaseDataset, standardizer: Standardizer, targetcol: usize) {
+    fn normalize(dataset: &mut BaseDataset, standardizer: Scaler, targetcol: usize) {
         match standardizer {
-            Standardizer::MinMax => {
+            Scaler::MinMax => {
                 let mins = dataset
                     .columns()
                     .iter()
@@ -111,8 +112,32 @@ impl LinearRegressorBuilder {
                     }
                 }
             }
-            Standardizer::ZScore => {
-                unimplemented!()
+            Scaler::ZScore => {
+                let means = dataset
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != targetcol)
+                    .map(|(_, col)| dataset.mean(col))
+                    .collect::<Vec<DType>>();
+                let stds = dataset
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != targetcol)
+                    .map(|(_, col)| dataset.std(col))
+                    .collect::<Vec<DType>>();
+
+                for (index, mut col) in dataset
+                    .cols_mut()
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != targetcol)
+                {
+                    for elem in col.iter_mut() {
+                        *elem = (&*elem - &means[index]) / &stds[index];
+                    }
+                }
             }
         }
     }
@@ -121,7 +146,6 @@ impl LinearRegressorBuilder {
         assert!(self.num_iters != 0);
         let col_index = dataset._get_string_index(target_col);
         let (nsamples, nfeatures) = dataset.shape();
-        println!("{:?}", dataset.shape());
         let mut rng = thread_rng();
         //turn everything
         let x = dataset.into_f64_array_without_target(col_index);
@@ -147,9 +171,17 @@ impl LinearRegressorBuilder {
         self.weights = weights.to_vec();
     }
 
-    fn predict(&self, data: &Array2<f64>) -> Vec<f64> {
-        let mut predictions = (0..data.shape()[1]).map(|_| 0f64).collect::<Vec<f64>>();
-
+    fn predict(&self, data: &Array2<f64>, target_col: usize) -> Vec<f64> {
+        let mut predictions = Vec::new();
+        for row in data.rows() {
+            let mut current = 0f64;
+            for (index, elem) in row.iter().enumerate() {
+                if index != target_col {
+                    current += elem * self.weights[index];
+                }
+            }
+            predictions.push(current);
+        }
         predictions
     }
 
@@ -159,19 +191,21 @@ impl LinearRegressorBuilder {
         let (nrows, ncols) = dataset.shape();
         let nweights = ncols - 1; //cause we're taking in the full dataset; makes sense
         let mut eqns = Array2::from_elem((0, ncols + 1), 0f64); //we don't have info about the shape of this array
-        let mut first_ = Array1::from_elem(ncols + 1, 0f64);
-        first_[0] = nrows as f64;
+        let mut first = Array1::from_elem(ncols + 1, 0f64);
+        self.weights = Vec::from_iter((0..nweights).map(|_| 0f64));
+        first[0] = nrows as f64;
         (0..ncols)
             .filter(|index| *index != target_col_index)
             .for_each(|index| {
-                first_[index + 1] = dataset.get_col(index).sum().to_f64().unwrap();
+                first[index + 1] = dataset.get_col(index).sum().to_f64().unwrap();
             });
         //pushes the target col to the last in eqns; nice
-        first_[ncols - 1] = target.sum().to_f64().unwrap();
-        eqns.push_row(first_.view()).expect("First eqn couldn't fit in");
+        first[ncols - 1] = target.sum().to_f64().unwrap();
+        eqns.push_row(first.view())
+            .expect("First eqn couldn't fit in");
         let nsums = ((ncols - 1) * (ncols)) / 2;
         let mut sums: Vec<f64> = Vec::from_iter((0..nsums).map(|_| 0f64));
-        for elem in 0 .. nsums {
+        for elem in 0..nsums {
             let mut first_col = 0;
             let mut group_ind: isize = elem as isize;
             loop {
@@ -181,28 +215,29 @@ impl LinearRegressorBuilder {
                 }
                 first_col += 1;
             }
-            let mut second_col =
-                (elem as isize - ((nweights as isize * 2 - first_col as isize + 1) * first_col as isize / 2)) + first_col as isize;
+            let mut second_col = (elem as isize
+                - ((nweights as isize * 2 - first_col as isize + 1) * first_col as isize / 2))
+                + first_col as isize;
             first_col = if first_col < target_col_index {
                 first_col
             } else {
                 first_col + 1
             };
-            second_col = if second_col < target_col_index as isize{
+            second_col = if second_col < target_col_index as isize {
                 second_col
             } else {
                 second_col + 1
             };
-            sums[elem] = dataset
-                .get_col(first_col)
-                .map(|x| x.to_f64().unwrap())
-                .dot(&dataset.get_col(second_col as usize).map(|x| x.to_f64().unwrap()));
+            sums[elem] = dot(
+                dataset.get_col(first_col),
+                dataset.get_col(second_col as usize),
+            );
         }
-        for elem in 0 .. nweights {
+        for elem in 0..nweights {
             let mut current = Vec::new();
             //bias
             current.push(eqns[(0, elem + 1)]);
-            for elem_two in 0 .. nweights {
+            for elem_two in 0..nweights {
                 println!("{}", elem_two);
                 current.push(sums[Self::_sum_index(elem, elem_two, nweights)]);
             }
@@ -211,23 +246,18 @@ impl LinearRegressorBuilder {
             } else {
                 elem + 1
             };
-            let dot = dataset
-                .get_col(non_target_index)
-                .map(|x| x.to_f64().unwrap())
-                .dot(
-                    &dataset
-                        .get_col(target_col_index)
-                        .map(|x| x.to_f64().unwrap()),
-                );
+            let dot = dot(
+                dataset.get_col(non_target_index),
+                dataset.get_col(target_col_index),
+            );
             current.push(dot);
-            eqns.push_row(Array1::from_vec(current).view()).expect("Shape error");
+            eqns.push_row(Array1::from_vec(current).view())
+                .expect("Shape error");
         }
-        println!("We got here");
         solve_linear_systems(&mut eqns.view_mut());
-        println!("We passed here");
         self.bias = eqns[(0, nweights)];
-        for elem in 1 ..= nweights{
-            self.weights[elem] = eqns[(elem, nweights)];
+        for elem in 1..=nweights {
+            self.weights[elem - 1] = eqns[(elem, nweights)];
         }
     }
 
@@ -241,7 +271,7 @@ impl LinearRegressorBuilder {
     }
 }
 
-enum Standardizer {
+enum Scaler {
     MinMax,
     ZScore,
 }
@@ -261,8 +291,13 @@ mod tests {
         .unwrap();
         dataset.drop_na(None, true);
         let mut learner = LinearRegressorBuilder::new();
-        LinearRegressorBuilder::normalize(&mut dataset, Standardizer::MinMax, 13);
-        learner.fitv2(&dataset, "MEDV");
-        println!("MAE: {}", 8)
+        LinearRegressorBuilder::normalize(&mut dataset, Scaler::MinMax, 13);
+        learner.nfit(&dataset, "MEDV");
+        println!(
+            "MAE: {:?}",
+            learner
+                .predict(&dataset.into_f64_array_without_target(13), 13)
+                .as_slice()
+        );
     }
 }

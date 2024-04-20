@@ -1,10 +1,10 @@
-use ndarray::ArrayViewMut2;
+use ndarray::{ArrayView1, ArrayViewMut2};
 
 use super::*;
 use crate::*;
 
 pub fn forward_elimination(array: &mut ArrayViewMut2<f64>) {
-    let len = array.len();
+    let len = array.shape()[0];
     for i in 0..len - 1 {
         for j in i + 1..len {
             let pivot = array[(j, i)] / array[(i, i)];
@@ -20,8 +20,8 @@ pub fn forward_elimination(array: &mut ArrayViewMut2<f64>) {
 }
 
 pub fn backward_substitution(array: &mut ArrayViewMut2<f64>) {
-    let len = array.len();
-    for i in (0 .. =len - 1).rev() {
+    let len = array.shape()[0];
+    for i in (0..=(len - 1)).rev() {
         let mut sum = 0f64;
         for j in i + 1..len {
             sum += array[(i, j)] * array[(j, len)];
@@ -31,7 +31,7 @@ pub fn backward_substitution(array: &mut ArrayViewMut2<f64>) {
 }
 
 pub fn solve_linear_systems(array: &mut ArrayViewMut2<f64>) {
-    let len = array.len();
+    let len = array.shape()[0];
     if len == 0 {
         return;
     }
@@ -41,4 +41,13 @@ pub fn solve_linear_systems(array: &mut ArrayViewMut2<f64>) {
         return;
     }
     backward_substitution(array);
+}
+
+pub fn dot(left: ArrayView1<dtype::DType>, right: ArrayView1<dtype::DType>) -> f64 {
+    assert!(left.len() == right.len());
+    let mut res = dtype::DType::F64(0f64);
+    zip(left.iter(), right.iter()).for_each(|(x, y)| {
+        res += x * y;
+    });
+    res.to_f64().unwrap()
 }
