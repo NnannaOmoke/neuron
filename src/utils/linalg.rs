@@ -6,7 +6,7 @@ use crate::*;
 pub fn forward_elimination(array: &mut ArrayViewMut2<f64>) {
     let len = array.shape()[0];
     for i in 0..len - 1 {
-        for j in i + 1..len {
+        for j in (i + 1)..len {
             let pivot = array[(j, i)] / array[(i, i)];
             if pivot.abs() < 1e-10f64 {
                 eprintln!("Potential singular matrix encountered!");
@@ -23,7 +23,7 @@ pub fn backward_substitution(array: &mut ArrayViewMut2<f64>) {
     let len = array.shape()[0];
     for i in (0..=(len - 1)).rev() {
         let mut sum = 0f64;
-        for j in i + 1..len {
+        for j in (i + 1)..len {
             sum += array[(i, j)] * array[(j, len)];
         }
         array[(i, len)] = (array[(i, len)] - sum) / array[(i, i)]
@@ -50,4 +50,5 @@ pub fn dot(left: ArrayView1<dtype::DType>, right: ArrayView1<dtype::DType>) -> f
         res += x * y;
     });
     res.to_f64().unwrap()
+    //left.map(|x| x.to_f64().unwrap()).dot(&right.map(|x| x.to_f64().unwrap()))
 }

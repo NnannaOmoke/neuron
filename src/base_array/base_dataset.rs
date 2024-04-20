@@ -6,7 +6,7 @@ use crate::*;
 //we'll implement quite the number of methods for this, hopefully
 #[repr(C)]
 #[derive(Clone)]
-pub(crate) struct BaseDataset {
+pub struct BaseDataset {
     data: BaseMatrix,
     column_names: Vec<String>,
 }

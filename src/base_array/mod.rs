@@ -13,7 +13,7 @@ use thiserror::Error;
 
 #[repr(C)]
 #[derive(Clone)]
-pub(crate) struct BaseMatrix {
+pub struct BaseMatrix {
     data: Array2<DType>,
 }
 
@@ -192,7 +192,7 @@ impl Mul<BaseMatrix> for BaseMatrix {
 }
 
 #[derive(Debug, Error)]
-pub(crate) enum Error {
+pub enum Error {
     #[error(transparent)]
     CsvError(#[from] csv::Error),
     #[error("columns of matrix were not all of same data type")]
@@ -206,7 +206,7 @@ pub(crate) enum Error {
     ShapeError(#[from] ShapeError),
 }
 
-pub(crate) struct ColumnIter<'a> {
+pub struct ColumnIter<'a> {
     inner: LanesIter<'a, DType, Ix1>,
 }
 
@@ -218,7 +218,7 @@ impl<'a> Iterator for ColumnIter<'a> {
     }
 }
 
-pub(crate) struct RowIter<'a> {
+pub struct RowIter<'a> {
     inner: LanesIter<'a, DType, Ix1>,
 }
 
