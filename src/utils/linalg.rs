@@ -42,4 +42,3 @@ pub fn solve_linear_systems(array: &mut ArrayViewMut2<f64>) {
     }
     backward_substitution(array);
 }
-

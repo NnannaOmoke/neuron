@@ -8,7 +8,8 @@ use rand::{random, thread_rng, Rng};
 use crate::{
     base_array::{base_dataset::BaseDataset, BaseMatrix},
     dtype::DType,
-    *, utils::linalg::solve_linear_systems,
+    utils::linalg::solve_linear_systems,
+    *,
 };
 
 pub(crate) struct LinearRegressorBuilder {
@@ -148,9 +149,28 @@ impl LinearRegressorBuilder {
     }
 
     fn predict(&self, data: &Array2<f64>) -> Vec<f64> {
-        let mut predictions = (0..data.shape()[1]).map(|_| 0f64).collect::<Vec<f64>>();
-
-        predictions
+        let n = data.shape()[0];
+        let num_weights = data.shape()[1];
+        let mut return_value = Vec::new();
+        for i in 0..n {
+            let mut prediction = 0f64;
+            for j in 0..num_weights {
+                prediction += self.weights[j] * data[(i, j)];
+            }
+            prediction += self.bias;
+            return_value.push(prediction);
+        }
+        return_value
+    }
+    fn colunm_dot(first: usize, second: usize, dataset: &BaseDataset) -> f64 {
+        let col1 = dataset.get_col(first);
+        let col2 = dataset.get_col(second);
+        let mut ret_val = 0.0;
+        let n = dataset.shape().0;
+        for i in 0..n {
+            ret_val += col1[i].to_f64().unwrap() * col2[i].to_f64().unwrap();
+        }
+        ret_val
     }
 
     fn fitv2(&mut self, dataset: &BaseDataset, target: &str) {
@@ -167,11 +187,12 @@ impl LinearRegressorBuilder {
                 first_[index + 1] = dataset.get_col(index).sum().to_f64().unwrap();
             });
         //pushes the target col to the last in eqns; nice
-        first_[ncols - 1] = target.sum().to_f64().unwrap();
-        eqns.push_row(first_.view()).expect("First eqn couldn't fit in");
+        first_[ncols] = target.sum().to_f64().unwrap();
+        eqns.push_row(first_.view())
+            .expect("First eqn couldn't fit in");
         let nsums = ((ncols - 1) * (ncols)) / 2;
         let mut sums: Vec<f64> = Vec::from_iter((0..nsums).map(|_| 0f64));
-        for elem in 0 .. nsums {
+        for elem in 0..nsums {
             let mut first_col = 0;
             let mut group_ind: isize = elem as isize;
             loop {
@@ -181,28 +202,27 @@ impl LinearRegressorBuilder {
                 }
                 first_col += 1;
             }
-            let mut second_col =
-                (elem as isize - ((nweights as isize * 2 - first_col as isize + 1) * first_col as isize / 2)) + first_col as isize;
+            let mut second_col = (elem as isize
+                - ((nweights as isize * 2 - first_col as isize + 1) * first_col as isize / 2))
+                + first_col as isize;
             first_col = if first_col < target_col_index {
                 first_col
             } else {
                 first_col + 1
             };
-            second_col = if second_col < target_col_index as isize{
+            second_col = if second_col < target_col_index as isize {
                 second_col
             } else {
                 second_col + 1
             };
-            sums[elem] = dataset
-                .get_col(first_col)
-                .map(|x| x.to_f64().unwrap())
-                .dot(&dataset.get_col(second_col as usize).map(|x| x.to_f64().unwrap()));
+            sums[elem] =
+                LinearRegressorBuilder::colunm_dot(first_col, second_col as usize, dataset);
         }
-        for elem in 0 .. nweights {
+        for elem in 0..nweights {
             let mut current = Vec::new();
             //bias
             current.push(eqns[(0, elem + 1)]);
-            for elem_two in 0 .. nweights {
+            for elem_two in 0..nweights {
                 println!("{}", elem_two);
                 current.push(sums[Self::_sum_index(elem, elem_two, nweights)]);
             }
@@ -211,25 +231,20 @@ impl LinearRegressorBuilder {
             } else {
                 elem + 1
             };
-            let dot = dataset
-                .get_col(non_target_index)
-                .map(|x| x.to_f64().unwrap())
-                .dot(
-                    &dataset
-                        .get_col(target_col_index)
-                        .map(|x| x.to_f64().unwrap()),
-                );
+            let dot = Self::colunm_dot(non_target_index, target_col_index, dataset);
             current.push(dot);
-            eqns.push_row(Array1::from_vec(current).view()).expect("Shape error");
+            eqns.push_row(Array1::from_vec(current).view())
+                .expect("Shape error");
         }
         println!("We got here");
         solve_linear_systems(&mut eqns.view_mut());
         println!("We passed here");
-        self.bias = eqns[(0, nweights)];
+        self.bias = eqns[(0, nweights + 1)];
         self.weights.resize(nweights, 0f64);
-        for elem in 1 ..= nweights{
-            self.weights[elem-1] = eqns[(elem, nweights)];
+        for elem in 1..=nweights {
+            self.weights[elem - 1] = eqns[(elem, nweights + 1)];
         }
+        println!("{:?}", self.weights);
     }
 
     fn _sum_index(eqn: usize, param: usize, nweights: usize) -> usize {
@@ -250,7 +265,7 @@ enum Standardizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
+    use crate::{utils::metrics::mean_abs_error, *};
     #[test]
     fn test_convergence() {
         let mut dataset = base_array::base_dataset::BaseDataset::from_csv(
@@ -260,10 +275,19 @@ mod tests {
             b',',
         )
         .unwrap();
-        dataset.drop_na(None, true);
+        //dataset.drop_na(None, true);
         let mut learner = LinearRegressorBuilder::new();
         //LinearRegressorBuilder::normalize(&mut dataset, Standardizer::MinMax, 13);
         learner.fitv2(&dataset, "MEDV");
-        println!("MAE: {}", 8)
+        let predicted = learner.predict(&dataset.into_f64_array_without_target(13));
+        let error = mean_abs_error(
+            dataset
+                .get_col(13)
+                .map(|x| x.to_f64().unwrap())
+                .as_slice()
+                .unwrap(),
+            predicted.as_slice(),
+        );
+        println!("MAE: {}", error)
     }
 }
