@@ -156,6 +156,12 @@ impl SubAssign<&BaseMatrix> for BaseMatrix {
         self.data -= &rhs.data
     }
 }
+
+impl Default for BaseMatrix{
+    fn default() -> Self {
+        BaseMatrix { data: Array2::default((0, 0)) }
+    }
+}
 //Subtraction is not implemented yet
 
 // impl Index<usize> for BaseMatrix {

@@ -38,6 +38,7 @@ pub(crate) use std::{
 };
 pub(crate) use thiserror::Error;
 
+
 // fn test_something(){
 //     let arr = nalgebra::DMatrix::repeat(100, 100, 4f32);
 //     let arr_two = nalgebra::DMatrix::repeat(100, 100, 4f32);

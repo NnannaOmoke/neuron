@@ -536,6 +536,12 @@ impl BaseDataset {
     }
 }
 
+impl Default for BaseDataset{
+    fn default() -> Self {
+        BaseDataset { data: BaseMatrix::default(), column_names: Vec::default()}
+    }
+}
+
 // impl<'a> Index<String> for BaseDataset<'a> {
 //     type Output = ArrayView1<'a, DType>;
 //     fn index(&self, index: String) -> &Self::Output {

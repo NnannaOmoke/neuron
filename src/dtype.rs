@@ -1029,6 +1029,12 @@ impl NumCast for DType {
     }
 }
 
+impl Default for DType{
+    fn default() -> Self {
+        DType::F64(0f64)
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]

@@ -8,20 +8,26 @@ use rand::{random, thread_rng, Rng};
 use crate::{
     base_array::{base_dataset::BaseDataset, BaseMatrix},
     dtype::DType,
-    utils::linalg::{dot, solve_linear_systems},
+    utils::{linalg::{dot, solve_linear_systems}, scaler::Scaler, model_selection},
     *,
 };
 
-pub(crate) struct LinearRegressorBuilder {
+pub struct LinearRegressorBuilder{
     weights: Vec<f64>,
     bias: f64,
+    scaler: Scaler,
+    train_test_split: model_selection::TrainTestSplitStrategy,
+    target_col: usize,
 }
 
 impl LinearRegressorBuilder {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             weights: vec![],
             bias: 0f64,
+            scaler: Scaler::None,
+            train_test_split: model_selection::TrainTestSplitStrategy::None,
+            target_col: 0, 
         }
     }
 
@@ -29,7 +35,7 @@ impl LinearRegressorBuilder {
         &self.weights
     }
 
-    fn predict(&self, data: &Array2<f64>, target_col: usize) -> Vec<f64> {
+    pub fn predict(&self, data: &Array2<f64>, target_col: usize) -> Vec<f64> {
         let mut predictions = Vec::new();
         for row in data.rows() {
             let mut current = 0f64;
@@ -43,7 +49,7 @@ impl LinearRegressorBuilder {
         predictions
     }
 
-    fn fit(&mut self, dataset: &BaseDataset, target: &str) {
+    pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
         let target_col_index = dataset._get_string_index(target);
         let target = dataset.get_col(target_col_index);
         let (nrows, ncols) = dataset.shape();
@@ -119,6 +125,7 @@ impl LinearRegressorBuilder {
         }
     }
 
+
     fn _sum_index(eqn: usize, param: usize, nweights: usize) -> usize {
         let first = usize::min(eqn, param);
         let second = usize::max(eqn, param);
@@ -147,7 +154,7 @@ mod tests {
         .unwrap();
         //dataset.drop_na(None, true);
         let mut learner = LinearRegressorBuilder::new();
-        utils::scaler::normalize(&mut dataset, utils::scaler::Scaler::MinMax, 13);
+        utils::scaler::Scaler::normalize(&mut utils::scaler::Scaler::MinMax, &mut dataset, 13);
         learner.fit(&dataset, "MEDV");
         let predicted = learner.predict(&dataset.into_f64_array(), 13);
         let error = root_mean_square_error(
