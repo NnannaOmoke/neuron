@@ -3,7 +3,9 @@ name = "neuron"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["gpu_accel"]
+gpu_accel = ["dep:pollster", "dep:wgpu"]
 
 [dependencies]
 counter = "0.5.7"
@@ -15,11 +17,13 @@ ndarray = {version = "0.15.6", features = ["std", "serde", "rayon"]}
 num-order = "1.2.0"
 num-traits = "0.2.18"
 ordered-float = "4.2.0"
-pollster = "0.3.0"
 prettytable = "0.10.0"
 rand = "0.8.5"
 thiserror = "1.0.58"
-wgpu = "0.19.4"
+
+# gpu_accel deps
+pollster = { version = "0.3.0", optional = true }
+wgpu = { version = "0.19.4", optional = true }
 
 [dev-dependencies]
 criterion = "0.3"
