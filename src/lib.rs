@@ -6,6 +6,7 @@ pub mod base_array;
 pub mod dtype;
 pub mod linear_models;
 pub mod utils;
+pub mod gpu_accel;
 //All imports are defined here and made (pub)crate
 pub(crate) use core::{
     fmt,

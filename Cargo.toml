@@ -15,9 +15,11 @@ ndarray = {version = "0.15.6", features = ["std", "serde", "rayon"]}
 num-order = "1.2.0"
 num-traits = "0.2.18"
 ordered-float = "4.2.0"
+pollster = "0.3.0"
 prettytable = "0.10.0"
 rand = "0.8.5"
 thiserror = "1.0.58"
+wgpu = "0.19.4"
 
 [dev-dependencies]
 criterion = "0.3"
