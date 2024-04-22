@@ -43,7 +43,7 @@ pub fn solve_linear_systems(array: &mut ArrayViewMut2<f64>) {
     backward_substitution(array);
 }
 
-pub fn dot(left: ArrayView1<dtype::DType>, right: ArrayView1<dtype::DType>) -> f64 {
+fn dot_d(left: ArrayView1<dtype::DType>, right: ArrayView1<dtype::DType>) -> f64 {
     assert!(left.len() == right.len());
     let mut res = dtype::DType::F64(0f64);
     zip(left.iter(), right.iter()).for_each(|(x, y)| {
@@ -51,4 +51,9 @@ pub fn dot(left: ArrayView1<dtype::DType>, right: ArrayView1<dtype::DType>) -> f
     });
     res.to_f64().unwrap()
     //left.map(|x| x.to_f64().unwrap()).dot(&right.map(|x| x.to_f64().unwrap()))
+}
+
+pub fn dot(left: ArrayView1<f64>, right: ArrayView1<f64>) -> f64{
+    assert!(left.len() == right.len());
+    left.dot(&right)
 }

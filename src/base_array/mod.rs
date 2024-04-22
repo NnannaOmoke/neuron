@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod base_matrix_tests;
-
 pub mod base_dataset;
 
 use crate::{
