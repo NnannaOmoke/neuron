@@ -53,7 +53,7 @@ fn dot_d(left: ArrayView1<dtype::DType>, right: ArrayView1<dtype::DType>) -> f64
     //left.map(|x| x.to_f64().unwrap()).dot(&right.map(|x| x.to_f64().unwrap()))
 }
 
-pub fn dot(left: ArrayView1<f64>, right: ArrayView1<f64>) -> f64{
+pub fn dot(left: ArrayView1<f64>, right: ArrayView1<f64>) -> f64 {
     assert!(left.len() == right.len());
     left.dot(&right)
 }

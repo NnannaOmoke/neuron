@@ -1029,7 +1029,7 @@ impl NumCast for DType {
     }
 }
 
-impl Default for DType{
+impl Default for DType {
     fn default() -> Self {
         DType::F64(0f64)
     }

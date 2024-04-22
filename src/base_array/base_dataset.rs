@@ -536,9 +536,12 @@ impl BaseDataset {
     }
 }
 
-impl Default for BaseDataset{
+impl Default for BaseDataset {
     fn default() -> Self {
-        BaseDataset { data: BaseMatrix::default(), column_names: Vec::default()}
+        BaseDataset {
+            data: BaseMatrix::default(),
+            column_names: Vec::default(),
+        }
     }
 }
 

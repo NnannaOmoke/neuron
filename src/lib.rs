@@ -4,10 +4,10 @@
 
 pub mod base_array;
 pub mod dtype;
-pub mod linear_models;
-pub mod utils;
 #[cfg(feature = "gpu_accel")]
 pub mod gpu_accel;
+pub mod linear_models;
+pub mod utils;
 //All imports are defined here and made (pub)crate
 pub(crate) use core::{
     fmt,
@@ -39,7 +39,6 @@ pub(crate) use std::{
     vec,
 };
 pub(crate) use thiserror::Error;
-
 
 // fn test_something(){
 //     let arr = nalgebra::DMatrix::repeat(100, 100, 4f32);

@@ -8,17 +8,16 @@ pub enum ScalerState {
     ZScore,
 }
 
-pub struct Scaler{
+pub struct Scaler {
     state: ScalerState,
     mins_means: Vec<f64>,
-    maxes_stds: Vec<f64>
+    maxes_stds: Vec<f64>,
 }
 
-
-impl ScalerState{
+impl ScalerState {
     pub fn normalize_dataset(&mut self, dataset: &mut BaseDataset, targetcol: usize) {
         match self {
-            ScalerState::None => {},
+            ScalerState::None => {}
             ScalerState::MinMax => {
                 let mins = dataset
                     .columns()
@@ -58,7 +57,7 @@ impl ScalerState{
                     .filter(|(index, _)| *index != targetcol)
                     .map(|(_, col)| dataset.std(col))
                     .collect::<Vec<DType>>();
-    
+
                 for (index, mut col) in dataset
                     .cols_mut()
                     .into_iter()
@@ -72,23 +71,37 @@ impl ScalerState{
             }
         }
     }
-
-    
 }
 
-impl Scaler{
-    pub fn fit(&mut self, data: &Array2<f64>, target: usize){
-        match self.state{
-            ScalerState::None => {},
+impl Scaler {
+    pub fn fit(&mut self, data: &Array2<f64>, target: usize) {
+        match self.state {
+            ScalerState::None => {}
             ScalerState::MinMax => {
                 let mut mins: Vec<f64> = vec![];
                 let mut maxes: Vec<f64> = vec![];
-                for (_, col) in data.columns().into_iter().enumerate().filter(|(index, _)| {
-                    *index != target
-                }){
-                    mins.push(col.map(|x| NotNan::<f64>::from_f64(*x).unwrap()).iter().min().unwrap().to_f64().unwrap());
-                    maxes.push(col.map(|x| NotNan::<f64>::from_f64(*x).unwrap()).iter().max().unwrap().to_f64().unwrap());
-                    
+                for (_, col) in data
+                    .columns()
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != target)
+                {
+                    mins.push(
+                        col.map(|x| NotNan::<f64>::from_f64(*x).unwrap())
+                            .iter()
+                            .min()
+                            .unwrap()
+                            .to_f64()
+                            .unwrap(),
+                    );
+                    maxes.push(
+                        col.map(|x| NotNan::<f64>::from_f64(*x).unwrap())
+                            .iter()
+                            .max()
+                            .unwrap()
+                            .to_f64()
+                            .unwrap(),
+                    );
                 }
                 self.maxes_stds = maxes;
                 self.mins_means = mins;
@@ -96,36 +109,48 @@ impl Scaler{
             ScalerState::ZScore => {
                 let mut stds: Vec<f64> = vec![];
                 let mut means: Vec<f64> = vec![];
-                for (_, col) in data.columns().into_iter().enumerate().filter(|(index, _)| {
-                    *index != target
-                }){
+                for (_, col) in data
+                    .columns()
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != target)
+                {
                     stds.push(col.std(0f64));
                     means.push(col.mean().unwrap());
-                    
                 }
                 self.mins_means = means;
                 self.maxes_stds = stds;
             }
         }
     }
-    pub fn transform(&mut self, data: &mut Array2<f64>, target: usize){
+    pub fn transform(&mut self, data: &mut Array2<f64>, target: usize) {
         //should not be called without fitting!
         //assert!(self.maxes_stds.len() != 0);
-        for (index, mut col) in data.columns_mut().into_iter().enumerate().filter(|(index, _)| *index != target){
-            for elem in col.iter_mut(){
-                match self.state{
-                    ScalerState::None => {},
-                    ScalerState::MinMax => {*elem = (&* elem - self.mins_means[index])/self.maxes_stds[index] - self.mins_means[index]},
-                    ScalerState::ZScore => {*elem = &*elem - self.mins_means[index]/self.maxes_stds[index]}, 
+        for (index, mut col) in data
+            .columns_mut()
+            .into_iter()
+            .enumerate()
+            .filter(|(index, _)| *index != target)
+        {
+            for elem in col.iter_mut() {
+                match self.state {
+                    ScalerState::None => {}
+                    ScalerState::MinMax => {
+                        *elem = (&*elem - self.mins_means[index]) / self.maxes_stds[index]
+                            - self.mins_means[index]
+                    }
+                    ScalerState::ZScore => {
+                        *elem = &*elem - self.mins_means[index] / self.maxes_stds[index]
+                    }
                 }
             }
         }
     }
 }
 
-impl From<&ScalerState> for Scaler{
+impl From<&ScalerState> for Scaler {
     fn from(value: &ScalerState) -> Self {
-        Self{
+        Self {
             state: value.clone(),
             mins_means: Vec::default(),
             maxes_stds: Vec::default(),
@@ -133,13 +158,12 @@ impl From<&ScalerState> for Scaler{
     }
 }
 
-impl Default for Scaler{
+impl Default for Scaler {
     fn default() -> Self {
-        Self{
+        Self {
             state: ScalerState::None,
             mins_means: Vec::default(),
             maxes_stds: Vec::default(),
         }
     }
 }
-

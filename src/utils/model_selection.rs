@@ -1,6 +1,5 @@
-pub enum TrainTestSplitStrategy{
+pub enum TrainTestSplitStrategy {
     None,
     TrainTest(f64),
     TrainTestEval(f64, f64, f64),
 }
-

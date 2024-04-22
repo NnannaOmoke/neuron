@@ -1,6 +1,6 @@
+pub mod base_dataset;
 #[cfg(test)]
 mod base_matrix_tests;
-pub mod base_dataset;
 
 use crate::{
     dtype::{self, DType, DTypeType},
@@ -156,9 +156,11 @@ impl SubAssign<&BaseMatrix> for BaseMatrix {
     }
 }
 
-impl Default for BaseMatrix{
+impl Default for BaseMatrix {
     fn default() -> Self {
-        BaseMatrix { data: Array2::default((0, 0)) }
+        BaseMatrix {
+            data: Array2::default((0, 0)),
+        }
     }
 }
 //Subtraction is not implemented yet
