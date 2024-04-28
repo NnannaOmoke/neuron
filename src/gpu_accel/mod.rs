@@ -57,50 +57,48 @@ impl GpuContext {
         let instance = Instance::new(lib, InstanceCreateInfo::default())?;
 
         let physical_devices = instance.enumerate_physical_devices()?;
+        if physical_devices.len() == 0 {
+            return Err(Error::NoVulkanDevices);
+        }
+
         // Looking for discrete gpu as that will likely be more powerful.
         let mut physical_device_tmp = None;
-        let mut fallback = None;
-        let mut maybe_queue_family_index = None;
-        let mut maybe_fallback_queue_family_index = None;
+        let mut queue_family_index_tmp = None;
         for pd in physical_devices {
-            let maybe_queue_family_index_tmp = pd
+            let maybe_queue_family_index = pd
                 .queue_family_properties()
                 .iter()
                 .position(|queue_family| queue_family.queue_flags.contains(QueueFlags::COMPUTE))
                 .map(|i| i as u32);
-            if let Some(queue_family_index_tmp) = maybe_queue_family_index_tmp {
+            if let Some(queue_family_index) = maybe_queue_family_index {
                 let device_type = pd.properties().device_type;
                 if device_type == PhysicalDeviceType::DiscreteGpu {
                     physical_device_tmp = Some(pd);
-                    maybe_queue_family_index = Some(queue_family_index_tmp);
+                    queue_family_index_tmp = Some(queue_family_index);
                     break;
                 } else if device_type as i32
-                    > fallback.as_ref().map_or(-1, |fbpd: &Arc<PhysicalDevice>| {
-                        fbpd.properties().device_type as i32
-                    })
+                    > physical_device_tmp
+                        .as_ref()
+                        .map_or(-1, |fbpd: &Arc<PhysicalDevice>| {
+                            fbpd.properties().device_type as i32
+                        })
                 {
-                    fallback = Some(pd);
-                    maybe_fallback_queue_family_index = Some(queue_family_index_tmp)
+                    physical_device_tmp = Some(pd);
+                    queue_family_index_tmp = Some(queue_family_index)
                 }
             }
         }
-        let (physical_device, queue_family_index) = if let Some(pd) = physical_device_tmp {
-            (
-                pd,
-                maybe_queue_family_index.expect(
-                    "if physical_device is Some, maybe_queue_family_index should too; this is a bug",
-                ),
-            )
-        } else if let Some(pd) = fallback {
-            (
-                pd,
-                maybe_fallback_queue_family_index.expect(
-                    "if fallback is Some, maybe_fallback_queue_family_index should too; this is a bug"
-                )
-            )
-        } else {
-            return Err(Error::NoVulkanComputingDevices);
-        };
+
+        debug_assert_eq!(
+            physical_device_tmp.is_some() || queue_family_index_tmp.is_some(),
+            physical_device_tmp.is_some() && queue_family_index_tmp.is_some()
+        );
+        let (physical_device, queue_family_index) =
+            if let (Some(pd), Some(qfi)) = (physical_device_tmp, queue_family_index_tmp) {
+                (pd, qfi)
+            } else {
+                return Err(Error::NoVulkanComputingDevices);
+            };
 
         let (device, queues_iter) = Device::new(
             physical_device,
