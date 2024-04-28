@@ -126,21 +126,29 @@ impl Scaler {
     pub fn transform(&mut self, data: &mut Array2<f64>, target: usize) {
         //should not be called without fitting!
         //assert!(self.maxes_stds.len() != 0);
-        for (index, mut col) in data
-            .columns_mut()
-            .into_iter()
-            .enumerate()
-            .filter(|(index, _)| *index != target)
-        {
-            for elem in col.iter_mut() {
-                match self.state {
-                    ScalerState::None => {}
-                    ScalerState::MinMax => {
-                        *elem = (&*elem - self.mins_means[index]) / self.maxes_stds[index]
-                            - self.mins_means[index]
+        match self.state {
+            ScalerState::None => {}
+            ScalerState::MinMax => {
+                for (index, mut col) in data
+                    .columns_mut()
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != target)
+                {
+                    for elem in col.iter_mut() {
+                        *elem = (&*elem - self.mins_means[index]) / (self.maxes_stds[index] - self.mins_means[index])
                     }
-                    ScalerState::ZScore => {
-                        *elem = &*elem - self.mins_means[index] / self.maxes_stds[index]
+                }
+            }
+            ScalerState::ZScore => {
+                for (index, mut col) in data
+                    .columns_mut()
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != target)
+                {
+                    for elem in col.iter_mut() {
+                        *elem = (&*elem - self.mins_means[index])/self.maxes_stds[index]
                     }
                 }
             }

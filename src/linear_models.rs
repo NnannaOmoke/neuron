@@ -243,8 +243,7 @@ impl LinearRegressorBuilder {
     fn _sum_index(eqn: usize, param: usize, nweights: usize) -> usize {
         let first = usize::min(eqn, param);
         let second = usize::max(eqn, param);
-        let mut s_index = 0;
-        s_index = (nweights * 2 - first + 1) * first / 2;
+        let mut s_index = (nweights * 2 - first + 1) * first / 2;
         s_index += second - first;
         s_index
     }
@@ -273,6 +272,11 @@ mod tests {
         let preds = learner.predict();
         let exact = learner.test.column(13).to_vec();
         let mae = mean_abs_error(&exact, &preds);
-        println!("The MAE is: {}", mae);
+        let rmse = root_mean_square_error(&exact, &preds);
+        let mse = mean_squared_error(&exact, &preds);
+        println!(
+            "The MAE is: {}, and the rmse is: {}, and the mse is: {}",
+            mae, rmse, mse
+        );
     }
 }

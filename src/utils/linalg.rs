@@ -57,3 +57,7 @@ pub fn dot(left: ArrayView1<f64>, right: ArrayView1<f64>) -> f64 {
     assert!(left.len() == right.len());
     left.dot(&right)
 }
+
+pub fn sigmoid(value: f64) -> f64{
+    1f64/1f64 + (-value.exp())
+}

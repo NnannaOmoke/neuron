@@ -52,7 +52,7 @@ impl BaseDataset {
             let len = reader.records().next().unwrap().unwrap().iter().count();
             //reset the reader
             reader.seek(Position::new())?;
-            (0..len).into_iter().for_each(|num| {
+            (0..len).for_each(|num| {
                 colnames.push(format!("Column{}", num));
             });
         }

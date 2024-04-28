@@ -127,7 +127,7 @@ impl GpuContext {
 pub enum Error {
     #[error(transparent)]
     LibraryLoading(#[from] vulkano::library::LoadingError),
-    #[error("no physical devices that support Vulkan also supported computing")]
+    #[error("no physical devices that support Vulkan also support computing")]
     NoVulkanComputingDevices,
     #[error("no physical devices that support Vulkan were found")]
     NoVulkanDevices,
