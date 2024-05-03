@@ -3,6 +3,7 @@ use std::{collections::HashSet, default};
 
 use float_derive::utils::eq;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayViewMut2};
+use ndarray_linalg::solve::Inverse;
 use num_traits::ToPrimitive;
 use rand::{random, rngs, seq::SliceRandom, thread_rng, Rng};
 
@@ -165,81 +166,41 @@ impl LinearRegressorBuilder {
         scaler.transform(&mut self.train, self.target_col);
         scaler.transform(&mut self.test, self.target_col);
         scaler.transform(&mut self.eval, self.target_col);
-        self.afit();
+        self.tfit();
     }
 
-    fn afit(&mut self) {
-        let target_index = self.target_col;
-        let target = self.train.column(target_index);
-        let (nrows, ncols) = (self.train.shape()[0], self.train.shape()[1]);
-        let nweights = ncols - 1; //cause we're taking in the full dataset; makes sense
-        let mut eqns = Array2::from_elem((0, ncols + 1), 0f64); //we don't have info about the shape of this array
-        let mut first = Array1::from_elem(ncols + 1, 0f64);
-        self.weights = Vec::from_iter((0..nweights).map(|_| 0f64));
-        first[0] = nrows as f64;
-        (0..ncols)
-            .filter(|index| *index != target_index)
-            .for_each(|index| {
-                first[index + 1] = self.train.column(index).sum().to_f64().unwrap();
-            });
-        //pushes the target col to the last in eqns; nice
-        first[ncols] = target.sum().to_f64().unwrap();
-        eqns.push_row(first.view())
-            .expect("First eqn couldn't fit in");
-        let nsums = ((ncols - 1) * (ncols)) / 2;
-        let mut sums: Vec<f64> = Vec::from_iter((0..nsums).map(|_| 0f64));
-        for elem in 0..nsums {
-            let mut first_col = 0;
-            let mut group_ind: isize = elem as isize;
-            loop {
-                group_ind -= nweights as isize - first_col as isize;
-                if group_ind < 0 {
-                    break;
-                }
-                first_col += 1;
-            }
-            let mut second_col = (elem as isize
-                - ((nweights as isize * 2 - first_col as isize + 1) * first_col as isize / 2))
-                + first_col as isize;
-            first_col = if first_col < target_index {
-                first_col
-            } else {
-                first_col + 1
-            };
-            second_col = if second_col < target_index as isize {
-                second_col
-            } else {
-                second_col + 1
-            };
-            sums[elem] = utils::linalg::dot(
-                self.train.column(first_col),
-                self.train.column(second_col as usize),
-            );
+    fn tfit(&mut self){
+        let mut features = if self.target_col != self.train.ncols() - 1{
+            let mut train_features = Array2::from_elem((self.train.nrows(), 0), 0f64);
+            for (_ ,col) in self.train.columns().into_iter().enumerate().filter(|(index, _)|{
+                *index != self.target_col
+            }){
+                train_features.push_column(col).unwrap();
+            }   
+            train_features
         }
-        for elem in 0..nweights {
-            let mut current = Vec::new();
-            //bias
-            current.push(eqns[(0, elem + 1)]);
-            for elem_two in 0..nweights {
-                current.push(sums[Self::_sum_index(elem, elem_two, nweights)]);
-            }
-            let non_target_index = if elem < target_index { elem } else { elem + 1 };
-            let dot = utils::linalg::dot(
-                self.train.column(non_target_index),
-                self.train.column(target_index),
-            );
-            current.push(dot);
-            eqns.push_row(Array1::from_vec(current).view())
-                .expect("Shape error");
-        }
-        solve_linear_systems(&mut eqns.view_mut());
-        self.bias = eqns[(0, nweights + 1)];
-        self.weights.resize(nweights, 0f64);
-        for elem in 1..=nweights {
-            self.weights[elem - 1] = eqns[(elem, nweights + 1)];
-        }
+        else{
+            self.train.slice(s![.. , .. self.train.ncols() - 1]).to_owned()
+        };
+        let target = self.train.column(self.target_col);
+        let ones = Array1::ones(features.nrows());
+        features.push_column(ones.view()).expect("Shape error");
+        //let ncols = target.shape()[0];
+        let feature_t = features.t();
+        let left = feature_t.dot(&features);
+        let right = feature_t.dot(&target);
+        let left = left.inv().expect("Inversion Failed");
+        let check = left.dot(&right);
+        self.weights = check.to_vec()[.. check.len() - 1].to_vec();
+        self.bias = *check.last().unwrap();
+
     }
 
+    fn tfit_predict(&self, data: &BaseDataset) -> Vec<f64>{
+        let without = data.into_f64_array();
+        let predictions = self.predict_external(&without, 13);
+        predictions
+    }
     fn _sum_index(eqn: usize, param: usize, nweights: usize) -> usize {
         let first = usize::min(eqn, param);
         let second = usize::max(eqn, param);
@@ -253,30 +214,31 @@ impl LinearRegressorBuilder {
 mod tests {
     use super::*;
     use crate::{
-        utils::metrics::{mean_abs_error, mean_squared_error, root_mean_square_error},
+        utils::{metrics::{mean_abs_error, mean_squared_error, root_mean_square_error}, scaler},
         *,
     };
     #[test]
     fn test_convergence() {
-        let dataset = base_array::base_dataset::BaseDataset::from_csv(
+        let mut dataset = base_array::base_dataset::BaseDataset::from_csv(
             Path::new("src/base_array/test_data/boston.csv"),
             true,
             true,
             b',',
         )
         .unwrap();
-        let mut learner = LinearRegressorBuilder::new()
-            .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7))
-            .scaler(ScalerState::MinMax);
+        let mut learner = LinearRegressorBuilder::new().scaler(utils::scaler::ScalerState::ZScore).train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::TrainTest(0.7));
+
         learner.fit(&dataset, "MEDV");
         let preds = learner.predict();
-        let exact = learner.test.column(13).to_vec();
-        let mae = mean_abs_error(&exact, &preds);
-        let rmse = root_mean_square_error(&exact, &preds);
-        let mse = mean_squared_error(&exact, &preds);
-        println!(
-            "The MAE is: {}, and the rmse is: {}, and the mse is: {}",
-            mae, rmse, mse
-        );
+        let exact = learner.get_test_data().column(13).to_vec();
+        let mae = utils::metrics::mean_abs_error(&exact, &preds);
+        let rmse = utils::metrics::root_mean_square_error(&exact, &preds);
+        let mse = utils::metrics::mean_squared_error(&exact, &preds);
+
+        println!("
+            MAE: {mae}, 
+            RMSE: {rmse}, 
+            MSE: {mse}
+        ");
     }
 }

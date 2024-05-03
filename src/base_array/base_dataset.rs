@@ -415,7 +415,7 @@ impl BaseDataset {
         if row_first {
             for (index, row) in self.rows().enumerate() {
                 let mut current_count = 0;
-                row.into_iter().for_each(|val| match val {
+                row.iter().for_each(|val| match val {
                     DType::None => current_count += 1,
                     _ => {}
                 });
@@ -429,7 +429,7 @@ impl BaseDataset {
         } else {
             for (index, col) in self.cols().enumerate() {
                 let mut current_count = 0;
-                col.into_iter().for_each(|val| match val {
+                col.iter().for_each(|val| match val {
                     DType::None => current_count += 1,
                     _ => {}
                 });
@@ -439,11 +439,9 @@ impl BaseDataset {
             }
             for elem in culprits.iter().rev() {
                 self._raw_col_drop(*elem);
+                
             }
         }
-    }
-    pub fn transpose(&mut self) {
-        todo!()
     }
     pub fn push_row(&mut self, row: &[DType]) {
         self.data.push_row(row)
@@ -545,53 +543,15 @@ impl Default for BaseDataset {
     }
 }
 
-// impl<'a> Index<String> for BaseDataset<'a> {
-//     type Output = ArrayView1<'a, DType>;
-//     fn index(&self, index: String) -> &Self::Output {
-//         let index = self._get_string_index(&index);
-//         &self.data.get_col(index)
-//     }
-// }
+impl Index<(usize, usize)> for BaseDataset{
+    type Output = DType;
+    fn index(&self, index: (usize, usize)) -> &Self::Output {
+        self.get(index.0, index.1)
+    }
+}
 
-// impl<'a> Index<usize> for BaseDataset<'a> {
-//     type Output = [DType];
-//     fn index(&self, index: usize) -> &Self::Output {
-//         //this should return a row, no?
-//        &self.data[index]
-//     }
-// }
-
-// impl<'a> Index<Range<usize>> for BaseDataset<'a> {
-//     type Output = [DType];
-//     fn index(&self, index: Range<usize>) -> &Self::Output {
-//         &self.data.data.as_slice().unwrap()[index]
-//     }
-// }
-
-// impl<'a> IndexMut<Range<usize>> for BaseDataset<'a> {
-//     fn index_mut(&mut self, index: Range<usize>) -> &mut Self::Output {
-//         &mut self.data.data.as_slice_mut().unwrap()[index]
-//     }
-// }
-
-// impl<'a> IndexMut<String> for BaseDataset<'a> {
-//     fn index_mut(&mut self, index: String) -> &mut Self::Output {
-//         let index = self
-//             .column_names
-//             .iter()
-//             .position(|x| *x == index)
-//             .expect("Element could not be found");
-//         todo!()
-
-//     }
-// }
-
-// impl<'a> IndexMut<usize> for BaseDataset<'a> {
-//     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-//         //this should return a row, no?
-//         match self.data.get_mut_row(index) {
-//             Some(slice) => slice,
-//             None => panic!("Invalid index"),
-//         }
-//     }
-// }
+impl IndexMut<(usize, usize)> for BaseDataset{
+    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
+        self.data.data.get_mut(index).unwrap()
+    }
+}

@@ -2,7 +2,7 @@ use super::*;
 use crate::*;
 
 pub const ERR_MSG_INCOMPAT_TYPES: &'static str =
-    "Attempt to perform numeric operation on incompatible types!";
+    "Attempt to perform a numeric operation on incompatible types!";
 
 #[repr(u8)]
 #[derive(Debug, PartialEq, PartialOrd, Clone, FloatEq)]

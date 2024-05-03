@@ -15,7 +15,7 @@ pub struct Scaler {
 }
 
 impl ScalerState {
-    pub fn normalize_dataset(&mut self, dataset: &mut BaseDataset, targetcol: usize) {
+    pub fn normalize_dataset(&self, dataset: &mut BaseDataset, targetcol: usize) {
         match self {
             ScalerState::None => {}
             ScalerState::MinMax => {

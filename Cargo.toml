@@ -26,6 +26,7 @@ thiserror = "1.0.58"
 bytemuck = { version = "1.15", optional = true }
 naga = { version = "0.19", optional = true }
 vulkano = { version = "0.34", optional = true }
+ndarray-linalg = { version = "0.16.0",features = ["intel-mkl-static"]}
 
 [dev-dependencies]
 criterion = "0.3"
