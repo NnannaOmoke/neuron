@@ -24,9 +24,17 @@ pub struct LinearRegressorBuilder {
     scaler: ScalerState,
     train_test_split: model_selection::TrainTestSplitStrategy,
     target_col: usize,
+    regularizer: LinearRegularizer,
     train: Array2<f64>,
     test: Array2<f64>,
     eval: Array2<f64>,
+}
+
+pub enum LinearRegularizer {
+    None,
+    Ridge(f64),
+    Lasso(f64),
+    ElasticNet(f64),
 }
 
 impl LinearRegressorBuilder {
@@ -37,6 +45,7 @@ impl LinearRegressorBuilder {
             scaler: ScalerState::None,
             train_test_split: model_selection::TrainTestSplitStrategy::None,
             target_col: 0,
+            regularizer: LinearRegularizer::None,
             train: Array2::default((0, 0)),
             test: Array2::default((0, 0)),
             eval: Array2::default((0, 0)),
@@ -84,6 +93,8 @@ impl LinearRegressorBuilder {
     pub fn scaler(self, scaler: ScalerState) -> Self {
         Self { scaler, ..self }
     }
+
+
     pub fn predict_external(&self, data: &Array2<f64>, target_col: usize) -> Vec<f64> {
         let mut predictions = Vec::new();
         for row in data.rows() {
@@ -97,6 +108,7 @@ impl LinearRegressorBuilder {
         }
         predictions
     }
+    
     pub fn predict(&self) -> Vec<f64> {
         match self.train_test_split {
             TrainTestSplitStrategy::None => self.predict_external(&self.train, self.target_col),
@@ -169,34 +181,63 @@ impl LinearRegressorBuilder {
         self.tfit();
     }
 
-    fn tfit(&mut self){
-        let mut features = if self.target_col != self.train.ncols() - 1{
+    fn tfit(&mut self) {
+        let mut features = if self.target_col != self.train.ncols() - 1 {
             let mut train_features = Array2::from_elem((self.train.nrows(), 0), 0f64);
-            for (_ ,col) in self.train.columns().into_iter().enumerate().filter(|(index, _)|{
-                *index != self.target_col
-            }){
+            for (_, col) in self
+                .train
+                .columns()
+                .into_iter()
+                .enumerate()
+                .filter(|(index, _)| *index != self.target_col)
+            {
                 train_features.push_column(col).unwrap();
-            }   
+            }
             train_features
-        }
-        else{
-            self.train.slice(s![.. , .. self.train.ncols() - 1]).to_owned()
+        } else {
+            self.train
+                .slice(s![.., ..self.train.ncols() - 1])
+                .to_owned()
         };
         let target = self.train.column(self.target_col);
         let ones = Array1::ones(features.nrows());
         features.push_column(ones.view()).expect("Shape error");
-        //let ncols = target.shape()[0];
+        let check = match self.regularizer {
+            LinearRegularizer::None => Self::non_regularizing_fit(features.view(), target),
+            LinearRegularizer::Ridge(var) => {
+                Self::ridge_regularizing_fit(features.view(), target, var)
+            }
+            _ => unimplemented!("we haven't gotten here yet"),
+        };
+        self.weights = check.to_vec()[..check.len() - 1].to_vec();
+        self.bias = *check.last().unwrap();
+    }
+
+    fn non_regularizing_fit(features: ArrayView2<f64>, target: ArrayView1<f64>) -> Array1<f64> {
         let feature_t = features.t();
         let left = feature_t.dot(&features);
         let right = feature_t.dot(&target);
         let left = left.inv().expect("Inversion Failed");
         let check = left.dot(&right);
-        self.weights = check.to_vec()[.. check.len() - 1].to_vec();
-        self.bias = *check.last().unwrap();
-
+        check
     }
 
-    fn tfit_predict(&self, data: &BaseDataset) -> Vec<f64>{
+    fn ridge_regularizing_fit(
+        features: ArrayView2<f64>,
+        target: ArrayView1<f64>,
+        regularizer: f64,
+    ) -> Array1<f64> {
+        let feature_t = features.t();
+        let eye = Array2::eye(features.nrows());
+        let l_left = feature_t.dot(&features);
+        let l_right = regularizer * eye;
+        let left = l_left + l_right;
+        let left_inv = left.inv().expect("Inversion Failed");
+        let right = feature_t.dot(&target);
+        left_inv.dot(&right)
+    }
+
+    fn tfit_predict(&self, data: &BaseDataset) -> Vec<f64> {
         let without = data.into_f64_array();
         let predictions = self.predict_external(&without, 13);
         predictions
@@ -214,19 +255,26 @@ impl LinearRegressorBuilder {
 mod tests {
     use super::*;
     use crate::{
-        utils::{metrics::{mean_abs_error, mean_squared_error, root_mean_square_error}, scaler},
+        utils::{
+            metrics::{mean_abs_error, mean_squared_error, root_mean_square_error},
+            scaler,
+        },
         *,
     };
     #[test]
     fn test_convergence() {
-        let mut dataset = base_array::base_dataset::BaseDataset::from_csv(
+        let dataset = base_array::base_dataset::BaseDataset::from_csv(
             Path::new("src/base_array/test_data/boston.csv"),
             true,
             true,
             b',',
         )
         .unwrap();
-        let mut learner = LinearRegressorBuilder::new().scaler(utils::scaler::ScalerState::ZScore).train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::TrainTest(0.7));
+        let mut learner = LinearRegressorBuilder::new()
+            .scaler(utils::scaler::ScalerState::ZScore)
+            .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::TrainTest(
+                0.7,
+            ));
 
         learner.fit(&dataset, "MEDV");
         let preds = learner.predict();
@@ -235,10 +283,12 @@ mod tests {
         let rmse = utils::metrics::root_mean_square_error(&exact, &preds);
         let mse = utils::metrics::mean_squared_error(&exact, &preds);
 
-        println!("
+        println!(
+            "
             MAE: {mae}, 
             RMSE: {rmse}, 
             MSE: {mse}
-        ");
+        "
+        );
     }
 }

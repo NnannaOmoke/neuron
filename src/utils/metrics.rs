@@ -5,7 +5,6 @@ use num_traits::Pow;
 use super::*;
 use crate::{linear_models::LinearRegressorBuilder, *};
 
-
 pub fn mean_abs_error(target: &[f64], predicted: &[f64]) -> f64 {
     assert!(target.len() == predicted.len());
     let len = target.len() as f64;

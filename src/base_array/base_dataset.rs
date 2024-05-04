@@ -439,7 +439,6 @@ impl BaseDataset {
             }
             for elem in culprits.iter().rev() {
                 self._raw_col_drop(*elem);
-                
             }
         }
     }
@@ -543,14 +542,14 @@ impl Default for BaseDataset {
     }
 }
 
-impl Index<(usize, usize)> for BaseDataset{
+impl Index<(usize, usize)> for BaseDataset {
     type Output = DType;
     fn index(&self, index: (usize, usize)) -> &Self::Output {
         self.get(index.0, index.1)
     }
 }
 
-impl IndexMut<(usize, usize)> for BaseDataset{
+impl IndexMut<(usize, usize)> for BaseDataset {
     fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
         self.data.data.get_mut(index).unwrap()
     }

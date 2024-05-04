@@ -136,7 +136,8 @@ impl Scaler {
                     .filter(|(index, _)| *index != target)
                 {
                     for elem in col.iter_mut() {
-                        *elem = (&*elem - self.mins_means[index]) / (self.maxes_stds[index] - self.mins_means[index])
+                        *elem = (&*elem - self.mins_means[index])
+                            / (self.maxes_stds[index] - self.mins_means[index])
                     }
                 }
             }
@@ -148,7 +149,7 @@ impl Scaler {
                     .filter(|(index, _)| *index != target)
                 {
                     for elem in col.iter_mut() {
-                        *elem = (&*elem - self.mins_means[index])/self.maxes_stds[index]
+                        *elem = (&*elem - self.mins_means[index]) / self.maxes_stds[index]
                     }
                 }
             }
