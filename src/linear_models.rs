@@ -1,7 +1,5 @@
 use core::num;
 use std::{collections::HashSet, default};
-
-use float_derive::utils::eq;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayViewMut2};
 use ndarray_linalg::solve::Inverse;
 use num_traits::ToPrimitive;
@@ -94,6 +92,11 @@ impl LinearRegressorBuilder {
         Self { scaler, ..self }
     }
 
+    pub fn regularizer(self, regularizer: LinearRegularizer) -> Self {
+        Self{
+            regularizer, ..self 
+        }
+    }
 
     pub fn predict_external(&self, data: &Array2<f64>, target_col: usize) -> Vec<f64> {
         let mut predictions = Vec::new();
@@ -108,7 +111,7 @@ impl LinearRegressorBuilder {
         }
         predictions
     }
-    
+
     pub fn predict(&self) -> Vec<f64> {
         match self.train_test_split {
             TrainTestSplitStrategy::None => self.predict_external(&self.train, self.target_col),
@@ -228,7 +231,7 @@ impl LinearRegressorBuilder {
         regularizer: f64,
     ) -> Array1<f64> {
         let feature_t = features.t();
-        let eye = Array2::eye(features.nrows());
+        let eye = Array2::eye(features.ncols());
         let l_left = feature_t.dot(&features);
         let l_right = regularizer * eye;
         let left = l_left + l_right;
@@ -237,18 +240,6 @@ impl LinearRegressorBuilder {
         left_inv.dot(&right)
     }
 
-    fn tfit_predict(&self, data: &BaseDataset) -> Vec<f64> {
-        let without = data.into_f64_array();
-        let predictions = self.predict_external(&without, 13);
-        predictions
-    }
-    fn _sum_index(eqn: usize, param: usize, nweights: usize) -> usize {
-        let first = usize::min(eqn, param);
-        let second = usize::max(eqn, param);
-        let mut s_index = (nweights * 2 - first + 1) * first / 2;
-        s_index += second - first;
-        s_index
-    }
 }
 
 #[cfg(test)]
@@ -274,7 +265,7 @@ mod tests {
             .scaler(utils::scaler::ScalerState::ZScore)
             .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::TrainTest(
                 0.7,
-            ));
+            )).regularizer(LinearRegularizer::Ridge(0.5));
 
         learner.fit(&dataset, "MEDV");
         let preds = learner.predict();
