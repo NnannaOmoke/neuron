@@ -1,6 +1,11 @@
 use core::num;
-use ndarray::{s, Array1, Array2, ArrayView1, ArrayViewMut2, linalg, ArrayViewMut1};
-use ndarray_linalg::{solve::Inverse, norm::Norm, opnorm::{NormType::Frobenius, OperationNorm}, Scalar};
+use ndarray::{linalg, s, Array1, Array2, ArrayView1, ArrayViewMut1, ArrayViewMut2};
+use ndarray_linalg::{
+    norm::Norm,
+    opnorm::{NormType::Frobenius, OperationNorm},
+    solve::Inverse,
+    Scalar,
+};
 use num_traits::ToPrimitive;
 use rand::{random, rngs, seq::SliceRandom, thread_rng, Rng};
 use std::{collections::HashSet, default, ops::Rem};
@@ -244,13 +249,20 @@ impl LinearRegressorBuilder {
         iters: usize,
     ) -> Array1<f64> {
         let nrows = features.shape()[0];
-        let ncols= features.shape()[1];
+        let ncols = features.shape()[1];
         let mut weights = Array1::ones(ncols);
-        for _ in 0 .. iters{
-            for (index, col) in features.columns().into_iter().enumerate(){
-                let step = Self::lasso_compute_step_col(features.view(), target, weights.view(), index, col);
+        for _ in 0..iters {
+            for (index, col) in features.columns().into_iter().enumerate() {
+                let step = Self::lasso_compute_step_col(
+                    features.view(),
+                    target,
+                    weights.view(),
+                    index,
+                    col,
+                );
                 let col_norm_factor = Self::lasso_compute_norm_term(col);
-                weights[index] = Self::lasso_soft_threshold(step, regularizer * (nrows as f64), col_norm_factor);
+                weights[index] =
+                    Self::lasso_soft_threshold(step, regularizer * (nrows as f64), col_norm_factor);
             }
         }
         weights
@@ -258,15 +270,21 @@ impl LinearRegressorBuilder {
 
     fn lasso_soft_threshold(rho: f64, lambda: f64, col_norm_factor: f64) -> f64 {
         if rho < -lambda {
-            (rho + lambda)/col_norm_factor
+            (rho + lambda) / col_norm_factor
         } else if rho > lambda {
-            (rho - lambda)/col_norm_factor
+            (rho - lambda) / col_norm_factor
         } else {
             0f64
         }
     }
 
-    fn lasso_compute_step_col(features: ArrayView2<f64>, target: ArrayView1<f64>, weights: ArrayView1<f64>, index: usize, col: ArrayView1<f64>) -> f64 {
+    fn lasso_compute_step_col(
+        features: ArrayView2<f64>,
+        target: ArrayView1<f64>,
+        weights: ArrayView1<f64>,
+        index: usize,
+        col: ArrayView1<f64>,
+    ) -> f64 {
         let mut feature_clone = features.to_owned();
         feature_clone.remove_index(Axis(1), index);
         let mut weight_clone = weights.to_owned();
@@ -277,7 +295,7 @@ impl LinearRegressorBuilder {
         step_col
     }
 
-    fn lasso_compute_norm_term(col: ArrayView1<f64>) ->f64{
+    fn lasso_compute_norm_term(col: ArrayView1<f64>) -> f64 {
         col.dot(&col)
     }
 }
@@ -313,7 +331,7 @@ mod tests {
             .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::TrainTest(
                 0.7,
             ))
-            .regularizer(LinearRegularizer::Lasso(0.01 , 100));
+            .regularizer(LinearRegularizer::Lasso(0.01, 100));
 
         learner.fit(&dataset, "MEDV");
         let preds = learner.predict();
