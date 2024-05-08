@@ -1,9 +1,9 @@
 use core::num;
-use std::{collections::HashSet, default};
-use ndarray::{s, Array1, Array2, ArrayView1, ArrayViewMut2};
-use ndarray_linalg::solve::Inverse;
+use ndarray::{s, Array1, Array2, ArrayView1, ArrayViewMut2, linalg, ArrayViewMut1};
+use ndarray_linalg::{solve::Inverse, norm::Norm, opnorm::{NormType::Frobenius, OperationNorm}, Scalar};
 use num_traits::ToPrimitive;
 use rand::{random, rngs, seq::SliceRandom, thread_rng, Rng};
+use std::{collections::HashSet, default, ops::Rem};
 
 use crate::{
     base_array::{base_dataset::BaseDataset, BaseMatrix},
@@ -26,13 +26,6 @@ pub struct LinearRegressorBuilder {
     train: Array2<f64>,
     test: Array2<f64>,
     eval: Array2<f64>,
-}
-
-pub enum LinearRegularizer {
-    None,
-    Ridge(f64),
-    Lasso(f64),
-    ElasticNet(f64),
 }
 
 impl LinearRegressorBuilder {
@@ -93,8 +86,9 @@ impl LinearRegressorBuilder {
     }
 
     pub fn regularizer(self, regularizer: LinearRegularizer) -> Self {
-        Self{
-            regularizer, ..self 
+        Self {
+            regularizer,
+            ..self
         }
     }
 
@@ -210,6 +204,9 @@ impl LinearRegressorBuilder {
             LinearRegularizer::Ridge(var) => {
                 Self::ridge_regularizing_fit(features.view(), target, var)
             }
+            LinearRegularizer::Lasso(var, iters) => {
+                Self::lasso_regularizing_fit(features, target, var, iters)
+            }
             _ => unimplemented!("we haven't gotten here yet"),
         };
         self.weights = check.to_vec()[..check.len() - 1].to_vec();
@@ -240,6 +237,56 @@ impl LinearRegressorBuilder {
         left_inv.dot(&right)
     }
 
+    fn lasso_regularizing_fit(
+        features: Array2<f64>,
+        target: ArrayView1<f64>,
+        regularizer: f64,
+        iters: usize,
+    ) -> Array1<f64> {
+        let nrows = features.shape()[0];
+        let ncols= features.shape()[1];
+        let mut weights = Array1::ones(ncols);
+        for _ in 0 .. iters{
+            for (index, col) in features.columns().into_iter().enumerate(){
+                let step = Self::lasso_compute_step_col(features.view(), target, weights.view(), index, col);
+                let col_norm_factor = Self::lasso_compute_norm_term(col);
+                weights[index] = Self::lasso_soft_threshold(step, regularizer * (nrows as f64), col_norm_factor);
+            }
+        }
+        weights
+    }
+
+    fn lasso_soft_threshold(rho: f64, lambda: f64, col_norm_factor: f64) -> f64 {
+        if rho < -lambda {
+            (rho + lambda)/col_norm_factor
+        } else if rho > lambda {
+            (rho - lambda)/col_norm_factor
+        } else {
+            0f64
+        }
+    }
+
+    fn lasso_compute_step_col(features: ArrayView2<f64>, target: ArrayView1<f64>, weights: ArrayView1<f64>, index: usize, col: ArrayView1<f64>) -> f64 {
+        let mut feature_clone = features.to_owned();
+        feature_clone.remove_index(Axis(1), index);
+        let mut weight_clone = weights.to_owned();
+        weight_clone.remove_index(Axis(0), index);
+        let prediction = feature_clone.dot(&weight_clone.view());
+        let res = target.to_owned() - prediction;
+        let step_col = col.dot(&res);
+        step_col
+    }
+
+    fn lasso_compute_norm_term(col: ArrayView1<f64>) ->f64{
+        col.dot(&col)
+    }
+}
+
+pub enum LinearRegularizer {
+    None,
+    Ridge(f64),
+    Lasso(f64, usize),
+    ElasticNet(f64),
 }
 
 #[cfg(test)]
@@ -265,7 +312,8 @@ mod tests {
             .scaler(utils::scaler::ScalerState::ZScore)
             .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::TrainTest(
                 0.7,
-            )).regularizer(LinearRegularizer::Ridge(0.5));
+            ))
+            .regularizer(LinearRegularizer::Lasso(0.01 , 100));
 
         learner.fit(&dataset, "MEDV");
         let preds = learner.predict();

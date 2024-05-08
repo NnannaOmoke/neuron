@@ -478,22 +478,15 @@ impl BaseDataset {
     {
         let left_index = self._get_string_index(left);
         let right_index = self._get_string_index(right);
-        let mut merged = Array1::from_elem((self.len(),), DType::None);
-        for (index, (left, right)) in zip(
-            self.get_col(left_index).iter(),
-            self.get_col(right_index).iter(),
-        )
-        .enumerate()
-        {
-            merged[index] = function(left, right);
+        //merge into the left_index
+        let right = self.get_col(right_index).to_owned();
+        let mut left = self.get_col_mut(left_index);
+        //the cols are of the same length, so we can do this
+        for (index, elem) in left.iter_mut().enumerate() {
+            *elem = function(&*elem, &right[index])
         }
-        self.data
-            .data
-            .push_column(merged.view())
-            .expect("Unexpected Shape on merge");
-        self._raw_col_drop(left_index);
-        self._raw_col_drop(right_index);
-        self.column_names.push(result_name.to_string());
+        self.column_names[left_index] = result_name.to_string();
+        self._raw_col_drop(right_index)
     }
 
     pub(crate) fn get(&self, rowindex: usize, colindex: usize) -> &DType {

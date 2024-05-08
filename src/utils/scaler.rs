@@ -1,13 +1,15 @@
 use super::*;
 use crate::{base_array::base_dataset::BaseDataset, dtype::DType, *};
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub enum ScalerState {
+    #[default]
     None,
     MinMax,
     ZScore,
 }
 
+#[derive(Default)]
 pub struct Scaler {
     state: ScalerState,
     mins_means: Vec<f64>,
@@ -123,7 +125,7 @@ impl Scaler {
             }
         }
     }
-    pub fn transform(&mut self, data: &mut Array2<f64>, target: usize) {
+    pub fn transform(&self, data: &mut Array2<f64>, target: usize) {
         //should not be called without fitting!
         //assert!(self.maxes_stds.len() != 0);
         match self.state {
@@ -161,16 +163,6 @@ impl From<&ScalerState> for Scaler {
     fn from(value: &ScalerState) -> Self {
         Self {
             state: value.clone(),
-            mins_means: Vec::default(),
-            maxes_stds: Vec::default(),
-        }
-    }
-}
-
-impl Default for Scaler {
-    fn default() -> Self {
-        Self {
-            state: ScalerState::None,
             mins_means: Vec::default(),
             maxes_stds: Vec::default(),
         }
