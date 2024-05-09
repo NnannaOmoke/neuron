@@ -1,9 +1,6 @@
 use core::num;
 use ndarray::{linalg, s, Array1, Array2, ArrayView1, ArrayViewMut1, ArrayViewMut2};
-use ndarray_linalg::{
-    solve::Inverse,
-    Scalar,
-};
+use ndarray_linalg::{solve::Inverse, Scalar};
 use num_traits::ToPrimitive;
 use rand::{random, rngs, seq::SliceRandom, thread_rng, Rng};
 use std::{collections::HashSet, default, ops::Rem};
@@ -212,7 +209,7 @@ impl LinearRegressorBuilder {
             }
             LinearRegularizer::ElasticNet(l1, l2, iters) => {
                 Self::_cordinate_descent(features, target, l1, Some(l2), iters)
-            },
+            }
         };
         self.weights = check.to_vec()[..check.len() - 1].to_vec();
         self.bias = *check.last().unwrap();
@@ -253,17 +250,14 @@ impl LinearRegressorBuilder {
         let mut weights = Array1::ones(ncols);
         for _ in 0..iters {
             for (index, col) in features.columns().into_iter().enumerate() {
-                let step = Self::_compute_step_col(
-                    features.view(),
-                    target,
-                    weights.view(),
-                    index,
-                    col,
-                );
+                let step =
+                    Self::_compute_step_col(features.view(), target, weights.view(), index, col);
                 let col_norm_factor = Self::_compute_norm_term(col);
-                weights[index] = match l2_regularizer{
-                    Some(var) => Self::elastic_net_soft_threshold(step, l1_regularizer, var, col_norm_factor),
-                    None => Self::lasso_soft_threshold(step, l1_regularizer, col_norm_factor)
+                weights[index] = match l2_regularizer {
+                    Some(var) => {
+                        Self::elastic_net_soft_threshold(step, l1_regularizer, var, col_norm_factor)
+                    }
+                    None => Self::lasso_soft_threshold(step, l1_regularizer, col_norm_factor),
                 }
             }
         }
@@ -280,22 +274,26 @@ impl LinearRegressorBuilder {
         }
     }
 
-    fn elastic_net_soft_threshold(rho: f64, l1: f64, l2: f64, col_norm_factor: f64) -> f64{
-        let gamma = if rho > 0f64 && (l1*l2) < rho.abs(){
+    fn elastic_net_soft_threshold(rho: f64, l1: f64, l2: f64, col_norm_factor: f64) -> f64 {
+        let gamma = if rho > 0f64 && (l1 * l2) < rho.abs() {
             rho - (l1 * l2)
-        }else if rho < 0f64 && (l1 * l2) < rho.abs(){
+        } else if rho < 0f64 && (l1 * l2) < rho.abs() {
             rho + (l1 * l2)
-        }else{ 0f64};
-        let gamma_interlude = gamma/(1f64 + l1 * (1f64 -  l2));
-        gamma_interlude/col_norm_factor
+        } else {
+            0f64
+        };
+        let gamma_interlude = gamma / (1f64 + l1 * (1f64 - l2));
+        gamma_interlude / col_norm_factor
     }
 
-    fn _sign(var: f64) -> f64{
-        if var > 0f64{
+    fn _sign(var: f64) -> f64 {
+        if var > 0f64 {
             1f64
-        }else if var < 0f64{
+        } else if var < 0f64 {
             -1f64
-        }else{0f64}
+        } else {
+            0f64
+        }
     }
     fn _compute_step_col(
         features: ArrayView2<f64>,
@@ -350,7 +348,7 @@ mod tests {
             .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::TrainTest(
                 0.7,
             ))
-            .regularizer(LinearRegularizer::ElasticNet(0.3, 0.7 , 20));
+            .regularizer(LinearRegularizer::ElasticNet(0.3, 0.7, 20));
 
         learner.fit(&dataset, "MEDV");
         let preds = learner.predict();
