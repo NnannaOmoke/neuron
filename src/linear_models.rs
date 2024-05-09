@@ -286,15 +286,6 @@ impl LinearRegressorBuilder {
         gamma_interlude / col_norm_factor
     }
 
-    fn _sign(var: f64) -> f64 {
-        if var > 0f64 {
-            1f64
-        } else if var < 0f64 {
-            -1f64
-        } else {
-            0f64
-        }
-    }
     fn _compute_step_col(
         features: ArrayView2<f64>,
         target: ArrayView1<f64>,
