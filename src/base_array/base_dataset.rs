@@ -3,14 +3,13 @@ use ndarray::Array1;
 use super::*;
 use crate::*;
 
-
 #[derive(Clone, Hash)]
-pub enum FillNAStrategy{
+pub enum FillNAStrategy {
     Mean,
     Median,
     Mode,
     Std,
-    Value(DType)
+    Value(DType),
 }
 
 //this will be the dataset visible to the external users
@@ -276,12 +275,15 @@ impl BaseDataset {
     pub fn mean(&self, colname: &str) -> DType {
         let col_index = self._get_string_index(colname);
         let col = self.get_col(col_index);
-        let sum: DType= col.iter().filter(|x| {
-            match x{
+        let sum: DType = col
+            .iter()
+            .filter(|x| match x {
                 DType::None | DType::Object(_) => false,
-                _ => true
-            }
-        }).map(|x| x.to_f32().unwrap()).sum::<f32>().into();
+                _ => true,
+            })
+            .map(|x| x.to_f32().unwrap())
+            .sum::<f32>()
+            .into();
         let len: DType = (self.len() as f32).into();
         sum.clone() / &len
     }
@@ -463,64 +465,82 @@ impl BaseDataset {
         self._raw_col_drop(right_index)
     }
 
-    pub fn value_counts(&self, colname: &str) -> HashMap<&DType, usize>{
+    pub fn value_counts(&self, colname: &str) -> HashMap<&DType, usize> {
         let index = self._get_string_index(colname);
         let mappings = Counter::from_iter(self.get_col(index).into_iter());
         mappings.into_map()
     }
 
-    pub fn nunique(&self, colname: &str) -> usize{
+    pub fn nunique(&self, colname: &str) -> usize {
         self.value_counts(colname).len()
     }
 
-    pub fn unique(&self, colname: &str) -> Vec<DType>{
-        self.value_counts(colname).keys().into_iter().map(|x| x.clone().clone()).collect::<Vec<DType>>()
+    pub fn unique(&self, colname: &str) -> Vec<DType> {
+        self.value_counts(colname)
+            .keys()
+            .into_iter()
+            .map(|x| x.clone().clone())
+            .collect::<Vec<DType>>()
     }
-    
-    pub fn fillna(&mut self, colname: &str, strategy: FillNAStrategy){
-        match strategy{
+
+    pub fn fillna(&mut self, colname: &str, strategy: FillNAStrategy) {
+        match strategy {
             FillNAStrategy::Mean => {
-                let mean  = self.mean(colname);
+                let mean = self.mean(colname);
                 let index = self._get_string_index(colname);
-                self.get_col_mut(index).iter_mut().filter(|x| match x{
-                    DType::None => true,
-                    _ => false
-                }).for_each(|x| *x = mean.clone())
-            },
+                self.get_col_mut(index)
+                    .iter_mut()
+                    .filter(|x| match x {
+                        DType::None => true,
+                        _ => false,
+                    })
+                    .for_each(|x| *x = mean.clone())
+            }
             FillNAStrategy::Mode => {
-                let mode  = self.mode(colname);
+                let mode = self.mode(colname);
                 let index = self._get_string_index(colname);
-                self.get_col_mut(index).iter_mut().filter(|x| match x{
-                    DType::None => true,
-                    _ => false
-                }).for_each(|x| *x = mode.clone())
-            },
+                self.get_col_mut(index)
+                    .iter_mut()
+                    .filter(|x| match x {
+                        DType::None => true,
+                        _ => false,
+                    })
+                    .for_each(|x| *x = mode.clone())
+            }
             FillNAStrategy::Median => {
-                let median  = self.median(colname);
+                let median = self.median(colname);
                 let index = self._get_string_index(colname);
-                self.get_col_mut(index).iter_mut().filter(|x| match x{
-                    DType::None => true,
-                    _ => false
-                }).for_each(|x| *x = median.clone())
-            },
+                self.get_col_mut(index)
+                    .iter_mut()
+                    .filter(|x| match x {
+                        DType::None => true,
+                        _ => false,
+                    })
+                    .for_each(|x| *x = median.clone())
+            }
             FillNAStrategy::Std => {
-                let std  = self.std(colname);
+                let std = self.std(colname);
                 let index = self._get_string_index(colname);
-                self.get_col_mut(index).iter_mut().filter(|x| match x{
-                    DType::None => true,
-                    _ => false
-                }).for_each(|x| *x = std.clone())
-            },
+                self.get_col_mut(index)
+                    .iter_mut()
+                    .filter(|x| match x {
+                        DType::None => true,
+                        _ => false,
+                    })
+                    .for_each(|x| *x = std.clone())
+            }
             FillNAStrategy::Value(var) => {
                 let index = self._get_string_index(colname);
-                self.get_col_mut(index).iter_mut().filter(|x| match x{
-                    DType::None => true,
-                    _ => false
-                }).for_each(|x| *x = var.clone())
+                self.get_col_mut(index)
+                    .iter_mut()
+                    .filter(|x| match x {
+                        DType::None => true,
+                        _ => false,
+                    })
+                    .for_each(|x| *x = var.clone())
             }
         }
     }
-
 
     pub(crate) fn get(&self, rowindex: usize, colindex: usize) -> &DType {
         self.data.get(rowindex, colindex)

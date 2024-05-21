@@ -1,8 +1,13 @@
 use std::collections::HashMap;
 
-use ndarray::{Array1, Array2, ArrayView2, ArrayView1, ArrayViewMut2, ArrayViewMut1};
-use rand::{thread_rng, prelude::SliceRandom};
-use crate::{base_array::base_dataset::BaseDataset, dtype::DTypeType};
+use crate::{
+    base_array::base_dataset::BaseDataset,
+    dtype::{DType, DTypeType},
+    Axis,
+};
+use ndarray::{Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2};
+use num_traits::ToPrimitive;
+use rand::{prelude::SliceRandom, thread_rng};
 
 #[derive(Copy, Clone, Default)]
 pub enum TrainTestSplitStrategy {
@@ -13,15 +18,15 @@ pub enum TrainTestSplitStrategy {
 }
 
 //tts for regression
-pub struct RTrainTestSplitStrategyData{
+pub struct RTrainTestSplitStrategyData {
     strategy: TrainTestSplitStrategy,
     pub train: Array2<f64>,
     pub test: Array2<f64>,
-    pub eval: Array2<f64>
+    pub eval: Array2<f64>,
 }
 
-impl RTrainTestSplitStrategyData{
-    pub fn new(strategy: TrainTestSplitStrategy, dataset: &BaseDataset) -> Self{
+impl RTrainTestSplitStrategyData {
+    pub fn new(strategy: TrainTestSplitStrategy, dataset: &BaseDataset) -> Self {
         let complete_array = dataset.into_f64_array();
         let mut indices = Vec::from_iter(0..dataset.len());
         let mut rngs = thread_rng();
@@ -30,7 +35,7 @@ impl RTrainTestSplitStrategyData{
         let mut train = Array2::from_elem((0, dataset.shape().1), 0f64);
         let mut test = Array2::from_elem((0, dataset.shape().1), 0f64);
         let mut eval = Array2::from_elem((0, dataset.shape().1), 0f64);
-        match strategy{
+        match strategy {
             TrainTestSplitStrategy::None => {
                 for elem in indices {
                     train
@@ -69,52 +74,53 @@ impl RTrainTestSplitStrategyData{
             }
         }
         drop(complete_array);
-        Self{
-            strategy, train, test, eval
+        Self {
+            strategy,
+            train,
+            test,
+            eval,
         }
     }
 
-    pub fn get_train(&self) -> ArrayView2<f64>{
+    pub fn get_train(&self) -> ArrayView2<f64> {
         self.train.view()
     }
 
-    pub fn get_train_mut(&mut self) -> ArrayViewMut2<f64>{
+    pub fn get_train_mut(&mut self) -> ArrayViewMut2<f64> {
         self.train.view_mut()
     }
 
-    pub fn get_test(&self) -> ArrayView2<f64>{
+    pub fn get_test(&self) -> ArrayView2<f64> {
         self.test.view()
     }
 
-    pub fn get_test_mut(&mut self) -> ArrayViewMut2<f64>{
+    pub fn get_test_mut(&mut self) -> ArrayViewMut2<f64> {
         self.test.view_mut()
     }
 
-    pub fn get_eval(&self) -> ArrayView2<f64>{
+    pub fn get_eval(&self) -> ArrayView2<f64> {
         self.eval.view()
     }
 
-    pub fn get_eval_mut(&mut self) -> ArrayViewMut2<f64>{
+    pub fn get_eval_mut(&mut self) -> ArrayViewMut2<f64> {
         self.eval.view_mut()
     }
 }
 
-impl Default for RTrainTestSplitStrategyData{
+impl Default for RTrainTestSplitStrategyData {
     fn default() -> Self {
-        Self{
+        Self {
             strategy: TrainTestSplitStrategy::default(),
             train: Array2::default((0, 0)),
             test: Array2::default((0, 0)),
-            eval: Array2::default((0, 0))
+            eval: Array2::default((0, 0)),
         }
     }
 }
 
-
-//tts for classification 
-pub struct CTrainTestSplitStrategyData{
+//tts for classification
+pub struct CTrainTestSplitStrategyData {
     strategy: TrainTestSplitStrategy,
-    mappings: Option<HashMap<String, u32>>,
     pub train_features: Array2<f64>,
     pub train_target: Array1<u32>,
     pub test_features: Array2<f64>,
@@ -123,32 +129,172 @@ pub struct CTrainTestSplitStrategyData{
     pub eval_target: Array1<u32>,
 }
 
-impl CTrainTestSplitStrategyData{
-    pub fn new(strategy: TrainTestSplitStrategy, dataset: &BaseDataset, target: usize) -> Self{
+impl CTrainTestSplitStrategyData {
+    pub fn new(strategy: TrainTestSplitStrategy, dataset: &BaseDataset, target: usize) -> Self {
         let feature_array = dataset.into_f64_array_without_target(target);
         let dtype = dataset.get_col(target).first().unwrap().data_type();
-        todo!();
+        let target_arr = match dtype {
+            DTypeType::F32 | DTypeType::F64 | DTypeType::U32 | DTypeType::U64 => {
+                Array1::from_iter(dataset.get_col(target).map(|x| x.to_u32().unwrap()))
+            }
+            DTypeType::Object => Self::init_string_mappings(
+                dataset
+                    .get_col(target)
+                    .map(|x| Box::new(x.to_string()))
+                    .view(),
+            ),
+            _ => panic!("None type detected in target column"),
+        };
+        let mut indices = Vec::from_iter(0..dataset.len());
+        let mut rngs = thread_rng();
+        indices.shuffle(&mut rngs);
+        //this should shuffle the indices, create an intermediate 2d array that we'll split based on the train-test-split strategy
+        let mut train_features = Array2::from_elem((0, dataset.shape().1), 0f64);
+        let mut test_features = Array2::from_elem((0, dataset.shape().1), 0f64);
+        let mut eval_features = Array2::from_elem((0, dataset.shape().1), 0f64);
+        let mut train_target = Array1::from_elem(dataset.shape().0, 0);
+        let mut test_target = Array1::from_elem(dataset.shape().0, 0);
+        let mut eval_target = Array1::from_elem(dataset.shape().0, 0);
+        let mut count = 0;
+        match strategy {
+            TrainTestSplitStrategy::None => {
+                for elem in indices {
+                    train_features
+                        .push_row(
+                            feature_array
+                                .row(elem)
+                                .iter()
+                                .enumerate()
+                                .filter(|(index, _)| *index != target)
+                                .map(|(_, x)| *x)
+                                .collect::<Array1<f64>>()
+                                .view(),
+                        )
+                        .expect("Shape error");
+                    train_target[count] = *target_arr.get(elem).unwrap() as u32;
+                    count += 1;
+                }
+                //cheese to save memory
+                test_target = Array1::default(0);
+                eval_target = Array1::default(0);
+            }
+            TrainTestSplitStrategy::TrainTest(train_r) => {
+                let train_ratio = (train_r * dataset.len() as f64) as usize;
+                for elem in &indices[..train_ratio] {
+                    train_features
+                        .push_row(
+                            feature_array
+                                .row(*elem)
+                                .iter()
+                                .enumerate()
+                                .filter(|(index, _)| *index != target)
+                                .map(|(_, x)| *x)
+                                .collect::<Array1<f64>>()
+                                .view(),
+                        )
+                        .expect("Shape error");
+                    train_target[count] = *target_arr.get(*elem).unwrap();
+                }
+                count = 0;
+                for elem in &indices[train_ratio..] {
+                    test_features
+                        .push_row(
+                            feature_array
+                                .row(*elem)
+                                .iter()
+                                .enumerate()
+                                .filter(|(index, _)| *index != target)
+                                .map(|(_, x)| *x)
+                                .collect::<Array1<f64>>()
+                                .view(),
+                        )
+                        .expect("Shape error");
+                    test_target[count] = *target_arr.get(target).unwrap();
+                }
+                eval_target = Array1::default(0);
+            }
+            TrainTestSplitStrategy::TrainTestEval(train_r, test_r, _) => {
+                let train_ratio = (train_r * dataset.len() as f64) as usize;
+                let test_ratio = (test_r * dataset.len() as f64) as usize;
+                for elem in &indices[..train_ratio] {
+                    train_features
+                        .push_row(
+                            feature_array
+                                .row(*elem)
+                                .iter()
+                                .enumerate()
+                                .filter(|(index, _)| *index != target)
+                                .map(|(_, x)| *x)
+                                .collect::<Array1<f64>>()
+                                .view(),
+                        )
+                        .expect("Shape error");
+                    train_target[count] = *target_arr.get(target).unwrap();
+                }
+                count = 0;
+                for elem in &indices[train_ratio..test_ratio + train_ratio] {
+                    test_features
+                        .push_row(
+                            feature_array
+                                .row(*elem)
+                                .iter()
+                                .enumerate()
+                                .filter(|(index, _)| *index != target)
+                                .map(|(_, x)| *x)
+                                .collect::<Array1<f64>>()
+                                .view(),
+                        )
+                        .expect("Shape error");
+                    test_target[count] = *target_arr.get(target).unwrap();
+                }
+                count = 0;
+                for elem in &indices[train_ratio + test_ratio..] {
+                    eval_features
+                        .push_row(
+                            feature_array
+                                .row(*elem)
+                                .iter()
+                                .enumerate()
+                                .filter(|(index, _)| *index != target)
+                                .map(|(_, x)| *x)
+                                .collect::<Array1<f64>>()
+                                .view(),
+                        )
+                        .expect("Shape error");
+                    eval_target[count] = *target_arr.get(target).unwrap();
+                }
+            }
+        }
+        drop(feature_array);
+        Self {
+            strategy,
+            train_features,
+            train_target,
+            test_features,
+            test_target,
+            eval_features,
+            eval_target,
+        }
     }
 
-    pub fn init_mappings(target: ArrayView1<Box<String>>) -> Option<HashMap<String, i32>>{
+    pub fn init_string_mappings(target: ArrayView1<Box<String>>) -> Array1<u32> {
         let mut map = HashMap::new();
-        let mut assigned = 0;
-        target.iter().for_each(|x|{
-                if !map.contains_key(x.as_ref()){
-                    map.entry(*x.clone()).or_insert(assigned);
-                    assigned += 1;
-                }
-            } 
-        );
-        Some(map)
+        let mut assigned = 0u32;
+        target.iter().for_each(|x| {
+            if !map.contains_key(x.as_ref()) {
+                map.entry(*x.clone()).or_insert(assigned);
+                assigned += 1;
+            }
+        });
+        let res = Array1::from_iter(target.iter().map(|x| *map.get(x.as_ref()).unwrap()));
+        res
     }
 }
 
-impl Default for CTrainTestSplitStrategyData{
+impl Default for CTrainTestSplitStrategyData {
     fn default() -> Self {
-        Self{
-            strategy:TrainTestSplitStrategy::default(),
-            mappings: Option::default(),
+        Self {
+            strategy: TrainTestSplitStrategy::default(),
             train_features: Array2::default((0, 0)),
             train_target: Array1::default(0),
             test_features: Array2::default((0, 0)),

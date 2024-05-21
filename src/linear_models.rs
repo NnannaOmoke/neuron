@@ -2,20 +2,26 @@ use core::num;
 use ndarray::{linalg, s, Array1, Array2, ArrayView1, ArrayViewMut1, ArrayViewMut2};
 use ndarray_linalg::{solve::Inverse, Scalar};
 use num_traits::ToPrimitive;
-use rand::{random, rngs::{self, ThreadRng}, seq::SliceRandom, thread_rng, Rng};
-use std::{collections::HashSet, default, ops::Rem, os::unix::thread, cell::RefCell};
+use rand::{
+    random,
+    rngs::{self, ThreadRng},
+    seq::SliceRandom,
+    thread_rng, Rng,
+};
+use std::{cell::RefCell, collections::HashSet, default, ops::Rem, os::unix::thread};
 
 use crate::{
     base_array::{base_dataset::BaseDataset, BaseMatrix},
     dtype::DType,
     utils::{
         linalg::{dot, solve_linear_systems},
-        model_selection::{self, TrainTestSplitStrategy, RTrainTestSplitStrategyData, CTrainTestSplitStrategyData},
+        model_selection::{
+            self, CTrainTestSplitStrategyData, RTrainTestSplitStrategyData, TrainTestSplitStrategy,
+        },
         scaler::{Scaler, ScalerState},
     },
     *,
 };
-
 
 pub struct LinearRegressorBuilder {
     weights: Vec<f64>,
@@ -37,7 +43,6 @@ impl LinearRegressorBuilder {
             strategy_data: RTrainTestSplitStrategyData::default(),
             target_col: 0,
             regularizer: LinearRegularizer::None,
-            
         }
     }
     pub fn bias(&self) -> f64 {
@@ -49,10 +54,7 @@ impl LinearRegressorBuilder {
     }
 
     pub fn train_test_split_strategy(self, strategy: TrainTestSplitStrategy) -> Self {
-        Self {
-            strategy,
-            ..self
-        }
+        Self { strategy, ..self }
     }
 
     pub fn scaler(self, scaler: ScalerState) -> Self {
@@ -82,7 +84,9 @@ impl LinearRegressorBuilder {
 
     pub fn predict(&self) -> Vec<f64> {
         match self.strategy {
-            TrainTestSplitStrategy::None => self.predict_external(&self.strategy_data.train, self.target_col),
+            TrainTestSplitStrategy::None => {
+                self.predict_external(&self.strategy_data.train, self.target_col)
+            }
             TrainTestSplitStrategy::TrainTest(_) => {
                 self.predict_external(&self.strategy_data.test, self.target_col)
             }
@@ -107,7 +111,8 @@ impl LinearRegressorBuilder {
         let mut features = if self.target_col != self.strategy_data.train.ncols() - 1 {
             let mut train_features = Array2::from_elem((self.strategy_data.train.nrows(), 0), 0f64);
             for (_, col) in self
-                .strategy_data.train
+                .strategy_data
+                .train
                 .columns()
                 .into_iter()
                 .enumerate()
@@ -117,7 +122,8 @@ impl LinearRegressorBuilder {
             }
             train_features
         } else {
-            self.strategy_data.train
+            self.strategy_data
+                .train
                 .slice(s![.., ..self.strategy_data.train.ncols() - 1])
                 .to_owned()
         };
@@ -241,7 +247,7 @@ pub enum LinearRegularizer {
     ElasticNet(f64, f64, usize),
 }
 
-struct LogisticRegressorBuilder{
+struct LogisticRegressorBuilder {
     weights: Vec<f64>,
     bias: f64,
     scaler: ScalerState,
@@ -251,20 +257,20 @@ struct LogisticRegressorBuilder{
     decision_point: f64,
 }
 
-impl LogisticRegressorBuilder{
-    pub fn new() -> Self{
-        Self{
+impl LogisticRegressorBuilder {
+    pub fn new() -> Self {
+        Self {
             weights: vec![],
             bias: 0.0,
             scaler: ScalerState::None,
             strategy: TrainTestSplitStrategy::None,
             data: CTrainTestSplitStrategyData::default(),
             target_index: 0,
-            decision_point: 0.5
+            decision_point: 0.5,
         }
     }
 
-    pub fn fit(&mut self, dataset: &BaseDataset, target: &str){
+    pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
         self.target_index = dataset._get_string_index(target);
         //splits into tts
         self.data = CTrainTestSplitStrategyData::new(self.strategy, dataset, self.target_index);
@@ -276,13 +282,11 @@ impl LogisticRegressorBuilder{
         self.tfit()
     }
 
-    pub fn tfit(&mut self){
+    pub fn tfit(&mut self) {}
 
-    }
-
-    pub fn binary_fit(features: ArrayView2<f64>, target: ArrayView1<u32>) -> Array1<f64>{
+    pub fn binary_fit(features: ArrayView2<f64>, target: ArrayView1<u32>) -> Array1<f64> {
         let weights = Array1::ones(features.ncols());
-        
+
         weights
     }
 }

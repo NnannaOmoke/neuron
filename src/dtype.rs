@@ -171,7 +171,7 @@ impl Add<&DType> for DType {
     }
 }
 
-impl <'a> Add<&DType> for &'a DType {
+impl<'a> Add<&DType> for &'a DType {
     type Output = DType;
 
     fn add(self, rhs: &DType) -> Self::Output {
@@ -363,7 +363,7 @@ impl Div<DType> for DType {
 impl<'a> Div<&DType> for &'a DType {
     type Output = DType;
 
-    fn div(self, rhs: &DType) -> Self::Output{
+    fn div(self, rhs: &DType) -> Self::Output {
         self.clone() / rhs.clone()
     }
 }
@@ -870,13 +870,13 @@ impl From<&DType> for DTypeType {
     }
 }
 
-impl Hash for DType{
+impl Hash for DType {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self{
+        match self {
             DType::None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             DType::F32(var) => NotNan::new(*var).unwrap().hash(state),
             DType::F64(var) => NotNan::new(*var).unwrap().hash(state),
-            var => var.hash(state)
+            var => var.hash(state),
         };
     }
 }
