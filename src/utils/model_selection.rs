@@ -174,6 +174,7 @@ impl CTrainTestSplitStrategyData {
                     train_target[count] = *target_arr.get(elem).unwrap() as u32;
                     count += 1;
                 }
+                train_features.push_column(Array1::ones(train_features.nrows()).view()).unwrap();
                 //cheese to save memory
                 test_target = Array1::default(0);
                 eval_target = Array1::default(0);
@@ -195,6 +196,7 @@ impl CTrainTestSplitStrategyData {
                         .expect("Shape error");
                     train_target[count] = *target_arr.get(*elem).unwrap();
                 }
+                train_features.push_column(Array1::ones(train_features.nrows()).view()).unwrap();
                 count = 0;
                 for elem in &indices[train_ratio..] {
                     test_features
@@ -231,6 +233,7 @@ impl CTrainTestSplitStrategyData {
                         .expect("Shape error");
                     train_target[count] = *target_arr.get(target).unwrap();
                 }
+                train_features.push_column(Array1::ones(train_features.nrows()).view()).unwrap();
                 count = 0;
                 for elem in &indices[train_ratio..test_ratio + train_ratio] {
                     test_features

@@ -272,6 +272,7 @@ impl LogisticRegressorBuilder {
 
     pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
         self.target_index = dataset._get_string_index(target);
+        let nlabels = dataset.nunique(target);
         //splits into tts
         self.data = CTrainTestSplitStrategyData::new(self.strategy, dataset, self.target_index);
         let mut scaler = Scaler::from(&self.scaler);
@@ -279,10 +280,21 @@ impl LogisticRegressorBuilder {
         scaler.transform(&mut self.data.train_features, self.target_index);
         scaler.transform(&mut self.data.test_features, self.target_index);
         scaler.transform(&mut self.data.eval_features, self.target_index);
-        self.tfit()
+        self.tfit(nlabels)
     }
 
-    pub fn tfit(&mut self) {}
+    pub fn tfit(&mut self, nclasses: usize) {
+        let (features, target) = self.data.get_train(); 
+        let weights = if nclasses == 2{
+            Self::binary_fit(features, target)
+        }else if nclasses > 2{
+            unimplemented!()
+        }else{
+            panic!("Only one target column!")
+        };
+        self.weights = weights.to_vec()[..weights.len() - 1].to_vec();
+        self.bias = weights[weights.len() - 1];
+    }
 
     pub fn binary_fit(features: ArrayView2<f64>, target: ArrayView1<u32>) -> Array1<f64> {
         let weights = Array1::ones(features.ncols());
