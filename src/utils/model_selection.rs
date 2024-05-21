@@ -289,6 +289,30 @@ impl CTrainTestSplitStrategyData {
         let res = Array1::from_iter(target.iter().map(|x| *map.get(x.as_ref()).unwrap()));
         res
     }
+
+    pub fn get_train(&self) -> (ArrayView2<f64>, ArrayView1<u32>) {
+        (self.train_features.view(), self.train_target.view())
+    }
+
+    pub fn get_train_mut(&mut self) -> (ArrayViewMut2<f64>, ArrayViewMut1<u32>) {
+        (self.train_features.view_mut(), self.train_target.view_mut())
+    }
+
+    pub fn get_test(&self) -> (ArrayView2<f64>, ArrayView1<u32>) {
+        (self.test_features.view(), self.test_target.view())
+    }
+
+    pub fn get_test_mut(&mut self) -> (ArrayViewMut2<f64>, ArrayViewMut1<u32>) {
+        (self.test_features.view_mut(), self.test_target.view_mut())
+    }
+
+    pub fn get_eval(&self) -> (ArrayView2<f64>,ArrayView1<u32>) {
+        (self.eval_features.view(), self.eval_target.view())
+    }
+
+    pub fn get_eval_mut(&mut self) -> (ArrayViewMut2<f64>, ArrayViewMut1<u32>){
+        (self.eval_features.view_mut(), self.eval_target.view_mut())
+    }
 }
 
 impl Default for CTrainTestSplitStrategyData {
