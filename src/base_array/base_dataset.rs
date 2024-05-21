@@ -2,6 +2,17 @@ use ndarray::Array1;
 
 use super::*;
 use crate::*;
+
+
+#[derive(Clone, Hash)]
+pub enum FillNAStrategy{
+    Mean,
+    Median,
+    Mode,
+    Std,
+    Value(DType)
+}
+
 //this will be the dataset visible to the external users
 //we'll implement quite the number of methods for this, hopefully
 #[repr(C)]
@@ -264,9 +275,15 @@ impl BaseDataset {
     //get the mean of a column
     pub fn mean(&self, colname: &str) -> DType {
         let col_index = self._get_string_index(colname);
-        let sum = self.get_col(col_index).sum();
+        let col = self.get_col(col_index);
+        let sum: DType= col.iter().filter(|x| {
+            match x{
+                DType::None | DType::Object(_) => false,
+                _ => true
+            }
+        }).map(|x| x.to_f32().unwrap()).sum::<f32>().into();
         let len: DType = (self.len() as f32).into();
-        sum / len
+        sum.clone() / &len
     }
     //get the median value of a column.
     //fuck this can be hard
@@ -279,46 +296,9 @@ impl BaseDataset {
     //get the mode of the column, i.e. most occuring element
     pub fn mode(&self, colname: &str) -> DType {
         let col_index = self._get_string_index(colname);
-        let dtypetype = DTypeType::from(self.get_col(col_index).first().unwrap());
-        match dtypetype {
-            DTypeType::None => {
-                panic!()
-            }
-            DTypeType::F32 | DTypeType::F64 | DTypeType::U32 | DTypeType::U64 => {
-                let counter = self
-                    .get_col(col_index)
-                    .iter()
-                    .filter(|x| match x {
-                        DType::None => false,
-                        _ => true,
-                    })
-                    .map(|val| match val {
-                        DType::F32(val) => NotNan::from_f64(*val as f64),
-                        DType::F64(val) => NotNan::from_f64(*val as f64),
-                        DType::U32(val) => NotNan::from_f64(*val as f64),
-                        DType::U64(val) => NotNan::from_f64(*val as f64),
-                        _ => unimplemented!(),
-                    })
-                    .collect::<Counter<_>>();
-                let highest_val: Option<NotNan<f64>> = counter.most_common()[0].0;
-                highest_val.unwrap().to_f64().unwrap().into()
-            }
-            DTypeType::Object => {
-                let counter = self
-                    .get_col(col_index)
-                    .iter()
-                    .filter(|x| match x {
-                        DType::None => false,
-                        _ => true,
-                    })
-                    .map(|val| match val {
-                        DType::Object(val) => val.clone(),
-                        _ => unimplemented!(),
-                    })
-                    .collect::<Counter<_>>();
-                counter.most_common()[0].0.clone().into()
-            }
-        }
+        let col = self.get_col(col_index);
+        let counter: Counter<&DType> = Counter::from_iter(col.iter());
+        counter.most_common_ordered()[0].0.clone()
     }
     //smallest element in the column
     pub fn min(&self, colname: &str) -> DType {
@@ -378,21 +358,15 @@ impl BaseDataset {
         let col_index = self._get_string_index(colname);
         //there will always be cheese
         self.get_col(col_index)
-            .map(|x| match x {
-                DType::F32(var) => *var as f64,
-                DType::F64(var) => *var,
-                DType::U32(var) => *var as f64,
-                DType::U64(var) => *var as f64,
-                _ => panic!("{}", dtype::ERR_MSG_INCOMPAT_TYPES),
-            })
+            .map(|x| x.to_f64().unwrap())
             .std(1.0)
             .into()
     }
     //std squared
     pub fn variance(&self, colname: &str) -> DType {
         //std^2
-        let std = self.std(colname);
-        return (&std * &std).into();
+        let std = self.std(colname).clone();
+        return std.clone() * std.clone();
     }
     //removes a column
     pub fn drop_col(&mut self, colname: &str) {
@@ -488,6 +462,65 @@ impl BaseDataset {
         self.column_names[left_index] = result_name.to_string();
         self._raw_col_drop(right_index)
     }
+
+    pub fn value_counts(&self, colname: &str) -> HashMap<&DType, usize>{
+        let index = self._get_string_index(colname);
+        let mappings = Counter::from_iter(self.get_col(index).into_iter());
+        mappings.into_map()
+    }
+
+    pub fn nunique(&self, colname: &str) -> usize{
+        self.value_counts(colname).len()
+    }
+
+    pub fn unique(&self, colname: &str) -> Vec<DType>{
+        self.value_counts(colname).keys().into_iter().map(|x| x.clone().clone()).collect::<Vec<DType>>()
+    }
+    
+    pub fn fillna(&mut self, colname: &str, strategy: FillNAStrategy){
+        match strategy{
+            FillNAStrategy::Mean => {
+                let mean  = self.mean(colname);
+                let index = self._get_string_index(colname);
+                self.get_col_mut(index).iter_mut().filter(|x| match x{
+                    DType::None => true,
+                    _ => false
+                }).for_each(|x| *x = mean.clone())
+            },
+            FillNAStrategy::Mode => {
+                let mode  = self.mode(colname);
+                let index = self._get_string_index(colname);
+                self.get_col_mut(index).iter_mut().filter(|x| match x{
+                    DType::None => true,
+                    _ => false
+                }).for_each(|x| *x = mode.clone())
+            },
+            FillNAStrategy::Median => {
+                let median  = self.median(colname);
+                let index = self._get_string_index(colname);
+                self.get_col_mut(index).iter_mut().filter(|x| match x{
+                    DType::None => true,
+                    _ => false
+                }).for_each(|x| *x = median.clone())
+            },
+            FillNAStrategy::Std => {
+                let std  = self.std(colname);
+                let index = self._get_string_index(colname);
+                self.get_col_mut(index).iter_mut().filter(|x| match x{
+                    DType::None => true,
+                    _ => false
+                }).for_each(|x| *x = std.clone())
+            },
+            FillNAStrategy::Value(var) => {
+                let index = self._get_string_index(colname);
+                self.get_col_mut(index).iter_mut().filter(|x| match x{
+                    DType::None => true,
+                    _ => false
+                }).for_each(|x| *x = var.clone())
+            }
+        }
+    }
+
 
     pub(crate) fn get(&self, rowindex: usize, colindex: usize) -> &DType {
         self.data.get(rowindex, colindex)

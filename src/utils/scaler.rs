@@ -40,7 +40,7 @@ impl ScalerState {
                         continue;
                     }
                     for elem in col.iter_mut() {
-                        *elem = (&*elem - &mins[index]) / (&maxs[index] - &mins[index])
+                        *elem = ((&*elem - &mins[index]) / (&maxs[index] - &mins[index])).clone()
                     }
                 }
             }
@@ -67,7 +67,7 @@ impl ScalerState {
                     .filter(|(index, _)| *index != targetcol)
                 {
                     for elem in col.iter_mut() {
-                        *elem = (&*elem - &means[index]) / &stds[index];
+                        *elem = ((&*elem - &means[index]) / &stds[index]).clone();
                     }
                 }
             }

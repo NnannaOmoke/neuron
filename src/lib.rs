@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 #![allow(unused_imports)]
+#![allow(suspicious_double_ref_op)]
 
 pub mod base_array;
 pub mod dtype;
