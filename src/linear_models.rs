@@ -31,10 +31,11 @@ pub struct LinearRegressorBuilder {
     strategy_data: RTrainTestSplitStrategyData,
     target_col: usize,
     regularizer: LinearRegularizer,
+    include_bias: bool,
 }
 
 impl LinearRegressorBuilder {
-    pub fn new() -> Self {
+    pub fn new(include_bias: bool) -> Self {
         Self {
             weights: vec![],
             bias: 0f64,
@@ -43,6 +44,7 @@ impl LinearRegressorBuilder {
             strategy_data: RTrainTestSplitStrategyData::default(),
             target_col: 0,
             regularizer: LinearRegularizer::None,
+            include_bias
         }
     }
     pub fn bias(&self) -> f64 {
@@ -68,14 +70,12 @@ impl LinearRegressorBuilder {
         }
     }
 
-    pub fn predict_external(&self, data: &Array2<f64>, target_col: usize) -> Vec<f64> {
+    pub fn predict_external(&self, data: ArrayView2<f64>) -> Vec<f64> {
         let mut predictions = Vec::new();
         for row in data.rows() {
             let mut current = 0f64;
             for (index, elem) in row.iter().enumerate() {
-                if index != target_col {
-                    current += elem * self.weights[index];
-                }
+                current += elem * self.weights[index];
             }
             predictions.push(current + self.bias);
         }
@@ -85,55 +85,37 @@ impl LinearRegressorBuilder {
     pub fn predict(&self) -> Vec<f64> {
         match self.strategy {
             TrainTestSplitStrategy::None => {
-                self.predict_external(&self.strategy_data.train, self.target_col)
+                self.predict_external(self.strategy_data.get_train().0)
             }
             TrainTestSplitStrategy::TrainTest(_) => {
-                self.predict_external(&self.strategy_data.test, self.target_col)
+                self.predict_external(self.strategy_data.get_test().0)
             }
             TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
-                self.predict_external(&self.strategy_data.eval, self.target_col)
+                self.predict_external(self.strategy_data.get_eval().0)
             }
         }
     }
 
     pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
         self.target_col = dataset._get_string_index(target);
-        self.strategy_data = RTrainTestSplitStrategyData::new(self.strategy, dataset);
+        self.strategy_data = RTrainTestSplitStrategyData::new(self.strategy, dataset, self.target_col);
         let mut scaler = Scaler::from(&self.scaler);
-        scaler.fit(&self.strategy_data.train, self.target_col);
-        scaler.transform(&mut self.strategy_data.train, self.target_col);
-        scaler.transform(&mut self.strategy_data.test, self.target_col);
-        scaler.transform(&mut self.strategy_data.eval, self.target_col);
+        scaler.fit(&self.strategy_data.get_train().0);
+        scaler.transform(&mut self.strategy_data.get_train_mut().0);
+        scaler.transform(&mut self.strategy_data.get_test_mut().0);
+        scaler.transform(&mut self.strategy_data.get_test_mut().0);
         self.tfit();
     }
 
     fn tfit(&mut self) {
-        let mut features = if self.target_col != self.strategy_data.train.ncols() - 1 {
-            let mut train_features = Array2::from_elem((self.strategy_data.train.nrows(), 0), 0f64);
-            for (_, col) in self
-                .strategy_data
-                .train
-                .columns()
-                .into_iter()
-                .enumerate()
-                .filter(|(index, _)| *index != self.target_col)
-            {
-                train_features.push_column(col).unwrap();
-            }
-            train_features
-        } else {
-            self.strategy_data
-                .train
-                .slice(s![.., ..self.strategy_data.train.ncols() - 1])
-                .to_owned()
-        };
-        let target = self.strategy_data.train.column(self.target_col);
-        let ones = Array1::ones(features.nrows());
-        features.push_column(ones.view()).expect("Shape error");
-        let check = match self.regularizer {
+        if self.include_bias{
+            self.strategy_data.train.push_column(Array1::ones(self.strategy_data.train.nrows()).view()).unwrap();
+        }
+        let (features, target) = self.strategy_data.get_train();
+        let weights = match self.regularizer {
             LinearRegularizer::None => Self::non_regularizing_fit(features.view(), target),
             LinearRegularizer::Ridge(var) => {
-                Self::ridge_regularizing_fit(features.view(), target, var)
+                Self::ridge_regularizing_fit(features, target, var)
             }
             LinearRegularizer::Lasso(var, iters) => {
                 Self::_coordinate_descent(features, target, var, None, iters)
@@ -142,8 +124,12 @@ impl LinearRegressorBuilder {
                 Self::_coordinate_descent(features, target, l1, Some(l2), iters)
             }
         };
-        self.weights = check.to_vec()[..check.len() - 1].to_vec();
-        self.bias = *check.last().unwrap();
+        if self.include_bias{
+            self.weights = weights.to_vec()[..weights.len() - 1].to_vec();
+            self.bias = *weights.last().unwrap();
+        }else{
+            self.weights = weights.to_vec();
+        }
     }
 
     fn non_regularizing_fit(features: ArrayView2<f64>, target: ArrayView1<f64>) -> Array1<f64> {
@@ -171,7 +157,7 @@ impl LinearRegressorBuilder {
     }
 
     fn _coordinate_descent(
-        features: Array2<f64>,
+        features: ArrayView2<f64>,
         target: ArrayView1<f64>,
         l1_regularizer: f64,
         l2_regularizer: Option<f64>,
@@ -254,11 +240,11 @@ struct LogisticRegressorBuilder {
     strategy: TrainTestSplitStrategy,
     data: CTrainTestSplitStrategyData,
     target_index: usize,
-    decision_point: f64,
+    include_bias: bool,
 }
 
 impl LogisticRegressorBuilder {
-    pub fn new() -> Self {
+    pub fn new(include_bias: bool) -> Self {
         Self {
             weights: vec![],
             bias: 0.0,
@@ -266,8 +252,24 @@ impl LogisticRegressorBuilder {
             strategy: TrainTestSplitStrategy::None,
             data: CTrainTestSplitStrategyData::default(),
             target_index: 0,
-            decision_point: 0.5,
+            include_bias
         }
+    }
+
+    pub fn bias(&self) -> f64 {
+        self.bias
+    }
+
+    pub fn weights(&self) -> &Vec<f64> {
+        &self.weights
+    }
+
+    pub fn train_test_split_strategy(self, strategy: TrainTestSplitStrategy) -> Self {
+        Self { strategy, ..self }
+    }
+
+    pub fn scaler(self, scaler: ScalerState) -> Self {
+        Self { scaler, ..self }
     }
 
     pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
@@ -276,45 +278,126 @@ impl LogisticRegressorBuilder {
         //splits into tts
         self.data = CTrainTestSplitStrategyData::new(self.strategy, dataset, self.target_index);
         let mut scaler = Scaler::from(&self.scaler);
-        scaler.fit(&self.data.train_features, self.target_index);
-        scaler.transform(&mut self.data.train_features, self.target_index);
-        scaler.transform(&mut self.data.test_features, self.target_index);
-        scaler.transform(&mut self.data.eval_features, self.target_index);
+        scaler.fit(&self.data.get_train().0);
+        scaler.transform(&mut self.data.get_train_mut().0);
+        scaler.transform(&mut self.data.get_test_mut().0);
+        scaler.transform(&mut self.data.get_eval_mut().0);
         self.tfit(nlabels)
     }
-
     pub fn tfit(&mut self, nclasses: usize) {
-        let (features, target) = self.data.get_train(); 
-        let weights = if nclasses == 2{
-            Self::binary_fit(features, target)
-        }else if nclasses > 2{
+        if self.include_bias{
+            self.data.train_features.push_column(Array1::ones(self.data.train_features.nrows()).view()).unwrap();
+        }
+        let (features, target) = self.data.get_train();
+        let weights = if nclasses == 2 {
+            Self::binary_fit(features, target, 1060)
+        } else if nclasses > 2 {
             unimplemented!()
-        }else{
+        } else {
             panic!("Only one target column!")
         };
-        self.weights = weights.to_vec()[..weights.len() - 1].to_vec();
-        self.bias = weights[weights.len() - 1];
+        if self.include_bias{
+            self.weights = weights.to_vec()[..weights.len() - 1].to_vec();
+            self.bias = *weights.last().unwrap();
+        }else{
+            self.weights = weights.to_vec();
+        }
+    }
+    //uses the SAG
+    //another alternative for super-fast convergence is the irls
+    pub fn binary_fit(
+        features: ArrayView2<f64>,
+        target: ArrayView1<u32>,
+        epochs: usize,
+    ) -> Array1<f64> {
+        let mut weights = Array1::from_elem(features.ncols(), 1f64);
+        let mut gradients = Self::grad_stochastic_gradient_descent(features, target, 1);
+        let mut gradient_sum =
+            Array1::from_shape_fn(features.ncols(), |x| gradients.column(x).sum());
+        let mut rand_gen = rand::thread_rng();
+        let mut curr_rand_index = rand_gen.gen_range(0..target.len());
+        let mut seen = 1;
+        for _ in 0..epochs {
+            let current_x = features.row(curr_rand_index);
+            let current_y = target[curr_rand_index];
+            let predictions = utils::linalg::sigmoid(current_x.dot(&weights));
+            let gradient = current_x.t().to_owned() * (current_y as f64 - predictions);
+            gradient_sum =
+                gradient_sum - gradients.row(curr_rand_index).to_owned() + gradient.view();
+            gradients.row_mut(curr_rand_index).assign(&gradient);
+            weights = weights - ((0.01 / seen as f64) * gradient_sum.to_owned());
+            seen += 1;
+            curr_rand_index = rand_gen.gen_range(0 .. target.len());
+        }
+        weights
     }
 
-    pub fn binary_fit(features: ArrayView2<f64>, target: ArrayView1<u32>) -> Array1<f64> {
-        let weights = Array1::ones(features.ncols());
+    fn grad_stochastic_gradient_descent(
+        features: ArrayView2<f64>,
+        target: ArrayView1<u32>,
+        epochs: usize,
+    ) -> Array2<f64> {
+        let mut weights = Array1::ones(features.ncols());
+        let mut gradients = Array2::from_elem((0, features.ncols()), 1f64);
+        let learning_rate = 0.01;
+        let (nrows, _) = (features.shape()[0], features.shape()[1]);
+        for _ in 0..epochs {
+            for elem in 0..nrows {
+                let current_x = features.row(elem);
+                let current_y = target[elem];
+                let prediction = utils::linalg::sigmoid(current_x.dot(&weights.view()));
+                let current_gradient = (current_y as f64 - prediction) * current_x.to_owned();
+                gradients
+                    .push_row(current_gradient.view())
+                    .expect("Shape Error");
+                weights = weights - (learning_rate * current_gradient);
+            }
+        }
+        gradients
+    }
 
-        weights
+    fn predict_external(&self, data: &ArrayView2<f64>) -> Array1<u32> {
+        let mut result = Array1::from_elem(data.nrows(), 0);
+        for (index, row) in data.rows().into_iter().enumerate() {
+            let mut logit = 0f64;
+            row.iter()
+                .enumerate()
+                .for_each(|(cindex, data)| logit += self.weights[cindex] * data);
+            logit += self.bias;
+            logit = utils::linalg::sigmoid(logit);
+            if logit > 0.5 {
+                result[index] = 1;
+            } else {
+                result[index] = 0;
+            }
+        }
+        result
+    }
+
+    pub fn predict(&self) -> Array1<u32> {
+        match self.strategy {
+            TrainTestSplitStrategy::None => self.predict_external(&self.data.get_train().0),
+            TrainTestSplitStrategy::TrainTest(_) => self.predict_external(&self.data.get_test().0),
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
+                self.predict_external(&self.data.get_eval().0)
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::{
         utils::{
-            metrics::{mean_abs_error, mean_squared_error, root_mean_square_error},
+            metrics::{accuracy, mean_abs_error, mean_squared_error, root_mean_square_error},
             scaler,
         },
         *,
     };
     #[test]
-    fn test_convergence() {
+    fn test_convergence_regression() {
         let dataset = base_array::base_dataset::BaseDataset::from_csv(
             Path::new("src/base_array/test_data/boston.csv"),
             true,
@@ -322,16 +405,16 @@ mod tests {
             b',',
         )
         .unwrap();
-        let mut learner = LinearRegressorBuilder::new()
+        let mut learner = LinearRegressorBuilder::new(true)
             .scaler(utils::scaler::ScalerState::ZScore)
             .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::TrainTest(
                 0.7,
             ))
-            .regularizer(LinearRegularizer::ElasticNet(0.3, 0.7, 20));
+            .regularizer(LinearRegularizer::None);
 
         learner.fit(&dataset, "MEDV");
         let preds = learner.predict();
-        let exact = learner.strategy_data.get_test().column(13).to_vec();
+        let exact = learner.strategy_data.get_test().1.to_vec();
         let mae = utils::metrics::mean_abs_error(&exact, &preds);
         let rmse = utils::metrics::root_mean_square_error(&exact, &preds);
         let mse = utils::metrics::mean_squared_error(&exact, &preds);
@@ -342,5 +425,24 @@ mod tests {
             MSE: {mse}
         "
         );
+    }
+
+    #[test]
+    fn test_convergence_classification() {
+        let dataset = base_array::base_dataset::BaseDataset::from_csv(
+            Path::new("src/base_array/test_data/diabetes.csv"),
+            true,
+            true,
+            b',',
+        )
+        .unwrap();
+        let mut classifier = LogisticRegressorBuilder::new(false)
+            .scaler(ScalerState::ZScore)
+            .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7));
+        classifier.fit(&dataset, "Outcome");
+        let predictions = classifier.predict();
+        let ground_truth = classifier.data.get_test().1;
+
+        dbg!(accuracy(&ground_truth.to_vec(), &predictions.to_vec()));
     }
 }

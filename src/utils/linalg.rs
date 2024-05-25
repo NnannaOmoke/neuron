@@ -59,5 +59,5 @@ pub fn dot(left: ArrayView1<f64>, right: ArrayView1<f64>) -> f64 {
 }
 
 pub fn sigmoid(value: f64) -> f64 {
-    1f64 / 1f64 + (-value.exp())
+    1f64 / (1f64 + (value.neg().exp()))
 }

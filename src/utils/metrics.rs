@@ -25,20 +25,21 @@ pub fn root_mean_square_error(target: &[f64], predicted: &[f64]) -> f64 {
     mean_squared_error(target, predicted).sqrt()
 }
 
-pub fn accuracy(target: &[i32], predicted: &[i32]) -> f64 {
+pub fn accuracy(target: &[u32], predicted: &[u32]) -> f64 {
     //probably need to create a heatmap for combination of variables
     assert!(target.len() == predicted.len());
+    let correct = zip(target, predicted).filter(|(x, y)| x == y).count();
+    correct as f64 / target.len() as f64
+}
+
+pub fn precision(target: &[u32], predicted: &[u32]) -> f64 {
     todo!()
 }
 
-pub fn precision(target: &[i32], predicted: &[i32]) -> f64 {
+pub fn recall(target: &[u32], predicted: &[u32]) -> f64 {
     todo!()
 }
 
-pub fn recall(target: &[i32], predicted: &[i32]) -> f64 {
-    todo!()
-}
-
-pub fn f1_score(target: &[i32], predicted: &[i32]) -> f64 {
+pub fn f1_score(target: &[u32], predicted: &[u32]) -> f64 {
     todo!()
 }

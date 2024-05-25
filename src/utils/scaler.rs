@@ -1,3 +1,5 @@
+use ndarray::ArrayViewMut2;
+
 use super::*;
 use crate::{base_array::base_dataset::BaseDataset, dtype::DType, *};
 
@@ -76,7 +78,7 @@ impl ScalerState {
 }
 
 impl Scaler {
-    pub fn fit(&mut self, data: &Array2<f64>, target: usize) {
+    pub fn fit(&mut self, data: &ArrayView2<f64>) {
         match self.state {
             ScalerState::None => {}
             ScalerState::MinMax => {
@@ -86,7 +88,6 @@ impl Scaler {
                     .columns()
                     .into_iter()
                     .enumerate()
-                    .filter(|(index, _)| *index != target)
                 {
                     mins.push(
                         col.map(|x| NotNan::<f64>::from_f64(*x).unwrap())
@@ -115,7 +116,6 @@ impl Scaler {
                     .columns()
                     .into_iter()
                     .enumerate()
-                    .filter(|(index, _)| *index != target)
                 {
                     stds.push(col.std(0f64));
                     means.push(col.mean().unwrap());
@@ -125,7 +125,7 @@ impl Scaler {
             }
         }
     }
-    pub fn transform(&self, data: &mut Array2<f64>, target: usize) {
+    pub fn transform(&self, data: &mut ArrayViewMut2<f64>) {
         //should not be called without fitting!
         //assert!(self.maxes_stds.len() != 0);
         match self.state {
@@ -135,7 +135,6 @@ impl Scaler {
                     .columns_mut()
                     .into_iter()
                     .enumerate()
-                    .filter(|(index, _)| *index != target)
                 {
                     for elem in col.iter_mut() {
                         *elem = (&*elem - self.mins_means[index])
@@ -148,7 +147,6 @@ impl Scaler {
                     .columns_mut()
                     .into_iter()
                     .enumerate()
-                    .filter(|(index, _)| *index != target)
                 {
                     for elem in col.iter_mut() {
                         *elem = (&*elem - self.mins_means[index]) / self.maxes_stds[index]

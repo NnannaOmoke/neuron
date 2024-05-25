@@ -20,39 +20,59 @@ pub enum TrainTestSplitStrategy {
 //tts for regression
 pub struct RTrainTestSplitStrategyData {
     strategy: TrainTestSplitStrategy,
-    pub train: Array2<f64>,
-    pub test: Array2<f64>,
-    pub eval: Array2<f64>,
+    pub(crate) train: Array2<f64>,
+    train_target: Array1<f64>,
+    test: Array2<f64>,
+    test_target: Array1<f64>,
+    eval: Array2<f64>,
+    eval_target: Array1<f64>
 }
 
 impl RTrainTestSplitStrategyData {
-    pub fn new(strategy: TrainTestSplitStrategy, dataset: &BaseDataset) -> Self {
-        let complete_array = dataset.into_f64_array();
+    pub fn new(strategy: TrainTestSplitStrategy, dataset: &BaseDataset, target: usize,) -> Self {
+        let complete_array = dataset.into_f64_array_without_target(target);
+        let target = dataset.get_col(target).map(|x| x.to_f64().unwrap()).to_owned();
         let mut indices = Vec::from_iter(0..dataset.len());
         let mut rngs = thread_rng();
         indices.shuffle(&mut rngs);
         //this should shuffle the indices, create an intermediate 2d array that we'll split based on the train-test-split strategy
-        let mut train = Array2::from_elem((0, dataset.shape().1), 0f64);
-        let mut test = Array2::from_elem((0, dataset.shape().1), 0f64);
-        let mut eval = Array2::from_elem((0, dataset.shape().1), 0f64);
+        let mut train = Array2::from_elem((0, dataset.shape().1 - 1), 0f64);
+        let mut test = Array2::from_elem((0, dataset.shape().1 - 1), 0f64);
+        let mut eval = Array2::from_elem((0, dataset.shape().1 -1), 0f64);
+        let mut train_target = Vec::new();
+        let mut test_target = Vec::new();
+        let mut eval_target = Vec::new();
         match strategy {
             TrainTestSplitStrategy::None => {
                 for elem in indices {
                     train
-                        .push_row(complete_array.row(elem))
+                        .push_row(complete_array
+                            .row(elem)
+                            .map(|x| *x)
+                            .view(),)
                         .expect("Shape error");
+                    train_target.push(target[elem]);
                 }
             }
             TrainTestSplitStrategy::TrainTest(train_r) => {
                 let train_ratio = (train_r * dataset.len() as f64) as usize;
                 for elem in &indices[..train_ratio] {
                     train
-                        .push_row(complete_array.row(*elem))
+                        .push_row(complete_array
+                            .row(*elem)
+                            .map(|x| *x)
+                            .view())
                         .expect("Shape error");
+                    train_target.push(target[*elem]);
                 }
+                
                 for elem in &indices[train_ratio..] {
-                    test.push_row(complete_array.row(*elem))
+                    test.push_row(complete_array
+                        .row(*elem)
+                        .map(|x| *x)
+                        .view())
                         .expect("Shape Error");
+                    test_target.push(target[*elem]);
                 }
             }
             TrainTestSplitStrategy::TrainTestEval(train_r, test_r, _) => {
@@ -60,16 +80,28 @@ impl RTrainTestSplitStrategyData {
                 let test_ratio = (test_r * dataset.len() as f64) as usize;
                 for elem in &indices[..train_ratio] {
                     train
-                        .push_row(complete_array.row(*elem))
+                        .push_row(complete_array
+                            .row(*elem)
+                            .map(|x| *x)
+                            .view())
                         .expect("Shape Error");
+                    train_target.push(target[*elem]);
                 }
                 for elem in &indices[train_ratio..test_ratio + train_ratio] {
-                    test.push_row(complete_array.row(*elem))
+                    test.push_row(complete_array
+                        .row(*elem)
+                        .map(|x| *x)
+                        .view())
                         .expect("Shape Error");
+                    test_target.push(target[*elem]);
                 }
                 for elem in &indices[train_ratio + test_ratio..] {
-                    eval.push_row(complete_array.row(*elem))
+                    eval.push_row(complete_array
+                        .row(*elem)
+                        .map(|x| *x)
+                        .view())
                         .expect("Shape Error");
+                    eval_target.push(target[*elem]);
                 }
             }
         }
@@ -77,34 +109,37 @@ impl RTrainTestSplitStrategyData {
         Self {
             strategy,
             train,
+            train_target: train_target.into(),
             test,
+            test_target: test_target.into(),
             eval,
+            eval_target: eval_target.into()
         }
     }
-
-    pub fn get_train(&self) -> ArrayView2<f64> {
-        self.train.view()
+    pub fn get_train(&self) -> (ArrayView2<f64>, ArrayView1<f64>) {
+        (self.train.view(), self.train_target.view())
     }
 
-    pub fn get_train_mut(&mut self) -> ArrayViewMut2<f64> {
-        self.train.view_mut()
+    pub fn get_train_mut(&mut self) -> (ArrayViewMut2<f64>, ArrayViewMut1<f64>) {
+        (self.train.view_mut(), self.train_target.view_mut())
     }
 
-    pub fn get_test(&self) -> ArrayView2<f64> {
-        self.test.view()
+    pub fn get_test(&self) -> (ArrayView2<f64>, ArrayView1<f64>) {
+        (self.test.view(), self.test_target.view())
     }
 
-    pub fn get_test_mut(&mut self) -> ArrayViewMut2<f64> {
-        self.test.view_mut()
+    pub fn get_test_mut(&mut self) -> (ArrayViewMut2<f64>, ArrayViewMut1<f64>) {
+        (self.test.view_mut(), self.test_target.view_mut())
     }
 
-    pub fn get_eval(&self) -> ArrayView2<f64> {
-        self.eval.view()
+    pub fn get_eval(&self) -> (ArrayView2<f64>, ArrayView1<f64>) {
+        (self.eval.view(), self.eval_target.view())
     }
 
-    pub fn get_eval_mut(&mut self) -> ArrayViewMut2<f64> {
-        self.eval.view_mut()
+    pub fn get_eval_mut(&mut self) -> (ArrayViewMut2<f64>, ArrayViewMut1<f64>) {
+        (self.eval.view_mut(), self.eval_target.view_mut())
     }
+   
 }
 
 impl Default for RTrainTestSplitStrategyData {
@@ -112,8 +147,11 @@ impl Default for RTrainTestSplitStrategyData {
         Self {
             strategy: TrainTestSplitStrategy::default(),
             train: Array2::default((0, 0)),
+            train_target: Array1::default(0),
             test: Array2::default((0, 0)),
+            test_target: Array1::default(0),
             eval: Array2::default((0, 0)),
+            eval_target: Array1::default(0),
         }
     }
 }
@@ -121,12 +159,12 @@ impl Default for RTrainTestSplitStrategyData {
 //tts for classification
 pub struct CTrainTestSplitStrategyData {
     strategy: TrainTestSplitStrategy,
-    pub train_features: Array2<f64>,
-    pub train_target: Array1<u32>,
-    pub test_features: Array2<f64>,
-    pub test_target: Array1<u32>,
-    pub eval_features: Array2<f64>,
-    pub eval_target: Array1<u32>,
+    pub(crate) train_features: Array2<f64>,
+    train_target: Array1<u32>,
+    test_features: Array2<f64>,
+    test_target: Array1<u32>,
+    eval_features: Array2<f64>,
+    eval_target: Array1<u32>,
 }
 
 impl CTrainTestSplitStrategyData {
@@ -149,13 +187,12 @@ impl CTrainTestSplitStrategyData {
         let mut rngs = thread_rng();
         indices.shuffle(&mut rngs);
         //this should shuffle the indices, create an intermediate 2d array that we'll split based on the train-test-split strategy
-        let mut train_features = Array2::from_elem((0, dataset.shape().1), 0f64);
-        let mut test_features = Array2::from_elem((0, dataset.shape().1), 0f64);
-        let mut eval_features = Array2::from_elem((0, dataset.shape().1), 0f64);
-        let mut train_target = Array1::from_elem(dataset.shape().0, 0);
-        let mut test_target = Array1::from_elem(dataset.shape().0, 0);
-        let mut eval_target = Array1::from_elem(dataset.shape().0, 0);
-        let mut count = 0;
+        let mut train_features = Array2::from_elem((0, dataset.shape().1 - 1), 0f64);
+        let mut test_features = Array2::from_elem((0, dataset.shape().1 - 1), 0f64);
+        let mut eval_features = Array2::from_elem((0, dataset.shape().1 - 1), 0f64);
+        let mut train_target = Vec::new();
+        let mut test_target = Vec::new();
+        let mut eval_target = Vec::new();
         match strategy {
             TrainTestSplitStrategy::None => {
                 for elem in indices {
@@ -163,21 +200,12 @@ impl CTrainTestSplitStrategyData {
                         .push_row(
                             feature_array
                                 .row(elem)
-                                .iter()
-                                .enumerate()
-                                .filter(|(index, _)| *index != target)
-                                .map(|(_, x)| *x)
-                                .collect::<Array1<f64>>()
+                                .map(|x| *x)
                                 .view(),
                         )
                         .expect("Shape error");
-                    train_target[count] = *target_arr.get(elem).unwrap() as u32;
-                    count += 1;
+                    train_target.push(*target_arr.get(elem).unwrap());
                 }
-                train_features.push_column(Array1::ones(train_features.nrows()).view()).unwrap();
-                //cheese to save memory
-                test_target = Array1::default(0);
-                eval_target = Array1::default(0);
             }
             TrainTestSplitStrategy::TrainTest(train_r) => {
                 let train_ratio = (train_r * dataset.len() as f64) as usize;
@@ -186,34 +214,23 @@ impl CTrainTestSplitStrategyData {
                         .push_row(
                             feature_array
                                 .row(*elem)
-                                .iter()
-                                .enumerate()
-                                .filter(|(index, _)| *index != target)
-                                .map(|(_, x)| *x)
-                                .collect::<Array1<f64>>()
+                                .map(|x| *x)
                                 .view(),
                         )
                         .expect("Shape error");
-                    train_target[count] = *target_arr.get(*elem).unwrap();
+                    train_target.push(*target_arr.get(*elem).unwrap());
                 }
-                train_features.push_column(Array1::ones(train_features.nrows()).view()).unwrap();
-                count = 0;
                 for elem in &indices[train_ratio..] {
                     test_features
                         .push_row(
                             feature_array
                                 .row(*elem)
-                                .iter()
-                                .enumerate()
-                                .filter(|(index, _)| *index != target)
-                                .map(|(_, x)| *x)
-                                .collect::<Array1<f64>>()
+                                .map(|x| *x)
                                 .view(),
                         )
                         .expect("Shape error");
-                    test_target[count] = *target_arr.get(target).unwrap();
+                    test_target.push(*target_arr.get(target).unwrap());
                 }
-                eval_target = Array1::default(0);
             }
             TrainTestSplitStrategy::TrainTestEval(train_r, test_r, _) => {
                 let train_ratio = (train_r * dataset.len() as f64) as usize;
@@ -223,48 +240,33 @@ impl CTrainTestSplitStrategyData {
                         .push_row(
                             feature_array
                                 .row(*elem)
-                                .iter()
-                                .enumerate()
-                                .filter(|(index, _)| *index != target)
-                                .map(|(_, x)| *x)
-                                .collect::<Array1<f64>>()
+                                .map(|x| *x)
                                 .view(),
                         )
                         .expect("Shape error");
-                    train_target[count] = *target_arr.get(target).unwrap();
+                    train_target.push(*target_arr.get(target).unwrap());
                 }
-                train_features.push_column(Array1::ones(train_features.nrows()).view()).unwrap();
-                count = 0;
                 for elem in &indices[train_ratio..test_ratio + train_ratio] {
                     test_features
                         .push_row(
                             feature_array
                                 .row(*elem)
-                                .iter()
-                                .enumerate()
-                                .filter(|(index, _)| *index != target)
-                                .map(|(_, x)| *x)
-                                .collect::<Array1<f64>>()
+                                .map(|x| *x)
                                 .view(),
                         )
                         .expect("Shape error");
-                    test_target[count] = *target_arr.get(target).unwrap();
+                    test_target.push(*target_arr.get(target).unwrap());
                 }
-                count = 0;
                 for elem in &indices[train_ratio + test_ratio..] {
                     eval_features
                         .push_row(
                             feature_array
                                 .row(*elem)
-                                .iter()
-                                .enumerate()
-                                .filter(|(index, _)| *index != target)
-                                .map(|(_, x)| *x)
-                                .collect::<Array1<f64>>()
+                                .map(|x| *x)
                                 .view(),
                         )
                         .expect("Shape error");
-                    eval_target[count] = *target_arr.get(target).unwrap();
+                    eval_target.push(*target_arr.get(target).unwrap());
                 }
             }
         }
@@ -272,11 +274,11 @@ impl CTrainTestSplitStrategyData {
         Self {
             strategy,
             train_features,
-            train_target,
+            train_target: train_target.into(),
             test_features,
-            test_target,
+            test_target: test_target.into(),
             eval_features,
-            eval_target,
+            eval_target: eval_target.into(),
         }
     }
 
@@ -309,11 +311,11 @@ impl CTrainTestSplitStrategyData {
         (self.test_features.view_mut(), self.test_target.view_mut())
     }
 
-    pub fn get_eval(&self) -> (ArrayView2<f64>,ArrayView1<u32>) {
+    pub fn get_eval(&self) -> (ArrayView2<f64>, ArrayView1<u32>) {
         (self.eval_features.view(), self.eval_target.view())
     }
 
-    pub fn get_eval_mut(&mut self) -> (ArrayViewMut2<f64>, ArrayViewMut1<u32>){
+    pub fn get_eval_mut(&mut self) -> (ArrayViewMut2<f64>, ArrayViewMut1<u32>) {
         (self.eval_features.view_mut(), self.eval_target.view_mut())
     }
 }

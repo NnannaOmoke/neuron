@@ -876,7 +876,9 @@ impl Hash for DType {
             DType::None => panic!("{}", ERR_MSG_INCOMPAT_TYPES),
             DType::F32(var) => NotNan::new(*var).unwrap().hash(state),
             DType::F64(var) => NotNan::new(*var).unwrap().hash(state),
-            var => var.hash(state),
+            DType::Object(var) => var.as_ref().hash(state),
+            DType::U32(var) => var.hash(state),
+            DType::U64(var) => var.hash(state),
         };
     }
 }
