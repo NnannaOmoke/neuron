@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = [ "gpu_accel" ]
+default = [ "gpu_accel", "async_impls" ]
 gpu_accel = [ "dep:bytemuck", "dep:naga", "dep:vulkano" ]
+async_impls = [ "dep:tokio" ]
 
 [dependencies]
 counter = "0.5.7"
@@ -14,6 +15,7 @@ float-derive = "0.1.0"
 float-derive-macros = "0.1.0"
 micromath = "2.1.0"
 ndarray = {version = "0.15.6", features = ["std", "serde", "rayon"]}
+ndarray-linalg = { version = "0.16.0", features = ["intel-mkl-static"]}
 num-order = "1.2.0"
 num-traits = "0.2.18"
 ordered-float = "4.2.0"
@@ -21,12 +23,13 @@ prettytable = "0.10.0"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 thiserror = "1.0.58"
+tokio = { version = "1.37.0", features = ["sync"], optional = true }
 
 # gpu_accel deps
 bytemuck = { version = "1.15", optional = true }
 naga = { version = "0.19", optional = true }
 vulkano = { version = "0.34", optional = true }
-ndarray-linalg = { version = "0.16.0", features = ["intel-mkl-static"]}
+log = "0.4.21"
 
 [dev-dependencies]
 criterion = "0.3"
