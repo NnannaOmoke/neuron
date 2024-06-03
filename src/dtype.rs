@@ -430,6 +430,7 @@ impl MulAssign<DType> for DType {
             }
             // else, no change
         } else {
+            //TODO: fix this abomination
             *self = unsafe { (self as *const DType).as_ref().unwrap().clone() * &rhs }
         }
     }

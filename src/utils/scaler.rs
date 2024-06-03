@@ -80,15 +80,11 @@ impl ScalerState {
 impl Scaler {
     pub fn fit(&mut self, data: &ArrayView2<f64>) {
         match self.state {
-            ScalerState::None => {}
+            ScalerState::None => {},
             ScalerState::MinMax => {
                 let mut mins: Vec<f64> = vec![];
                 let mut maxes: Vec<f64> = vec![];
-                for (_, col) in data
-                    .columns()
-                    .into_iter()
-                    .enumerate()
-                {
+                for (_, col) in data.columns().into_iter().enumerate() {
                     mins.push(
                         col.map(|x| NotNan::<f64>::from_f64(*x).unwrap())
                             .iter()
@@ -112,11 +108,7 @@ impl Scaler {
             ScalerState::ZScore => {
                 let mut stds: Vec<f64> = vec![];
                 let mut means: Vec<f64> = vec![];
-                for (_, col) in data
-                    .columns()
-                    .into_iter()
-                    .enumerate()
-                {
+                for (_, col) in data.columns().into_iter().enumerate() {
                     stds.push(col.std(0f64));
                     means.push(col.mean().unwrap());
                 }
@@ -129,25 +121,17 @@ impl Scaler {
         //should not be called without fitting!
         //assert!(self.maxes_stds.len() != 0);
         match self.state {
-            ScalerState::None => {}
+            ScalerState::None => {},
             ScalerState::MinMax => {
-                for (index, mut col) in data
-                    .columns_mut()
-                    .into_iter()
-                    .enumerate()
-                {
+                for (index, mut col) in data.columns_mut().into_iter().enumerate() {
                     for elem in col.iter_mut() {
                         *elem = (&*elem - self.mins_means[index])
                             / (self.maxes_stds[index] - self.mins_means[index])
                     }
                 }
-            }
+            },
             ScalerState::ZScore => {
-                for (index, mut col) in data
-                    .columns_mut()
-                    .into_iter()
-                    .enumerate()
-                {
+                for (index, mut col) in data.columns_mut().into_iter().enumerate() {
                     for elem in col.iter_mut() {
                         *elem = (&*elem - self.mins_means[index]) / self.maxes_stds[index]
                     }

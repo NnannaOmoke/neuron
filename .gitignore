@@ -4,3 +4,5 @@
 *.vscode
 *.cpp
 *rustfmt.toml
+*.rep
+*.gpr

@@ -16,7 +16,8 @@ use crate::{
     utils::{
         linalg::{dot, solve_linear_systems},
         model_selection::{
-            self, CTrainTestSplitStrategyData, RTrainTestSplitStrategyData, TrainTestSplitStrategy,
+            self, TrainTestSplitStrategy,
+            TrainTestSplitStrategyData,
         },
         scaler::{Scaler, ScalerState},
     },
@@ -28,7 +29,7 @@ pub struct LinearRegressorBuilder {
     bias: f64,
     scaler: ScalerState,
     strategy: TrainTestSplitStrategy,
-    strategy_data: RTrainTestSplitStrategyData,
+    strategy_data: TrainTestSplitStrategyData<f64, f64>,
     target_col: usize,
     regularizer: LinearRegularizer,
     include_bias: bool,
@@ -41,10 +42,10 @@ impl LinearRegressorBuilder {
             bias: 0f64,
             scaler: ScalerState::None,
             strategy: TrainTestSplitStrategy::None,
-            strategy_data: RTrainTestSplitStrategyData::default(),
+            strategy_data: TrainTestSplitStrategyData::default(),
             target_col: 0,
             regularizer: LinearRegularizer::None,
-            include_bias
+            include_bias,
         }
     }
     pub fn bias(&self) -> f64 {
@@ -84,9 +85,7 @@ impl LinearRegressorBuilder {
 
     pub fn predict(&self) -> Vec<f64> {
         match self.strategy {
-            TrainTestSplitStrategy::None => {
-                self.predict_external(self.strategy_data.get_train().0)
-            }
+            TrainTestSplitStrategy::None => self.predict_external(self.strategy_data.get_train().0),
             TrainTestSplitStrategy::TrainTest(_) => {
                 self.predict_external(self.strategy_data.get_test().0)
             }
@@ -98,7 +97,8 @@ impl LinearRegressorBuilder {
 
     pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
         self.target_col = dataset._get_string_index(target);
-        self.strategy_data = RTrainTestSplitStrategyData::new(self.strategy, dataset, self.target_col);
+        self.strategy_data =
+            TrainTestSplitStrategyData::<f64, f64>::new_r(dataset, self.target_col, self.strategy);
         let mut scaler = Scaler::from(&self.scaler);
         scaler.fit(&self.strategy_data.get_train().0);
         scaler.transform(&mut self.strategy_data.get_train_mut().0);
@@ -108,15 +108,17 @@ impl LinearRegressorBuilder {
     }
 
     fn tfit(&mut self) {
-        if self.include_bias{
-            self.strategy_data.train.push_column(Array1::ones(self.strategy_data.train.nrows()).view()).unwrap();
+        if self.include_bias {
+            self.strategy_data
+                .train_features
+                .push_column(Array1::ones(self.strategy_data.train_features.nrows()).view())
+                .unwrap();
         }
         let (features, target) = self.strategy_data.get_train();
+        dbg!(&features, &target);
         let weights = match self.regularizer {
             LinearRegularizer::None => Self::non_regularizing_fit(features.view(), target),
-            LinearRegularizer::Ridge(var) => {
-                Self::ridge_regularizing_fit(features, target, var)
-            }
+            LinearRegularizer::Ridge(var) => Self::ridge_regularizing_fit(features, target, var),
             LinearRegularizer::Lasso(var, iters) => {
                 Self::_coordinate_descent(features, target, var, None, iters)
             }
@@ -124,10 +126,10 @@ impl LinearRegressorBuilder {
                 Self::_coordinate_descent(features, target, l1, Some(l2), iters)
             }
         };
-        if self.include_bias{
+        if self.include_bias {
             self.weights = weights.to_vec()[..weights.len() - 1].to_vec();
             self.bias = *weights.last().unwrap();
-        }else{
+        } else {
             self.weights = weights.to_vec();
         }
     }
@@ -238,7 +240,7 @@ struct LogisticRegressorBuilder {
     bias: f64,
     scaler: ScalerState,
     strategy: TrainTestSplitStrategy,
-    data: CTrainTestSplitStrategyData,
+    data: TrainTestSplitStrategyData<f64, u32>,
     target_index: usize,
     include_bias: bool,
 }
@@ -250,9 +252,9 @@ impl LogisticRegressorBuilder {
             bias: 0.0,
             scaler: ScalerState::None,
             strategy: TrainTestSplitStrategy::None,
-            data: CTrainTestSplitStrategyData::default(),
+            data: TrainTestSplitStrategyData::default(),
             target_index: 0,
-            include_bias
+            include_bias,
         }
     }
 
@@ -260,7 +262,7 @@ impl LogisticRegressorBuilder {
         self.bias
     }
 
-    pub fn weights(&self) -> &Vec<f64> {
+    pub fn weights(&self) -> &[f64] {
         &self.weights
     }
 
@@ -276,7 +278,11 @@ impl LogisticRegressorBuilder {
         self.target_index = dataset._get_string_index(target);
         let nlabels = dataset.nunique(target);
         //splits into tts
-        self.data = CTrainTestSplitStrategyData::new(self.strategy, dataset, self.target_index);
+        self.data = TrainTestSplitStrategyData::<f64, u32>::new_c(
+            dataset,
+            self.target_index,
+            self.strategy,
+        );
         let mut scaler = Scaler::from(&self.scaler);
         scaler.fit(&self.data.get_train().0);
         scaler.transform(&mut self.data.get_train_mut().0);
@@ -285,8 +291,11 @@ impl LogisticRegressorBuilder {
         self.tfit(nlabels)
     }
     pub fn tfit(&mut self, nclasses: usize) {
-        if self.include_bias{
-            self.data.train_features.push_column(Array1::ones(self.data.train_features.nrows()).view()).unwrap();
+        if self.include_bias {
+            self.data
+                .train_features
+                .push_column(Array1::ones(self.data.train_features.nrows()).view())
+                .unwrap();
         }
         let (features, target) = self.data.get_train();
         let weights = if nclasses == 2 {
@@ -296,14 +305,14 @@ impl LogisticRegressorBuilder {
         } else {
             panic!("Only one target column!")
         };
-        if self.include_bias{
+        if self.include_bias {
             self.weights = weights.to_vec()[..weights.len() - 1].to_vec();
             self.bias = *weights.last().unwrap();
-        }else{
+        } else {
             self.weights = weights.to_vec();
         }
     }
-    //uses the SAG
+    //uses the SAG(A)
     //another alternative for super-fast convergence is the irls
     pub fn binary_fit(
         features: ArrayView2<f64>,
@@ -327,7 +336,7 @@ impl LogisticRegressorBuilder {
             gradients.row_mut(curr_rand_index).assign(&gradient);
             weights = weights - ((0.01 / seen as f64) * gradient_sum.to_owned());
             seen += 1;
-            curr_rand_index = rand_gen.gen_range(0 .. target.len());
+            curr_rand_index = rand_gen.gen_range(0..target.len());
         }
         weights
     }
@@ -437,7 +446,7 @@ mod tests {
         )
         .unwrap();
         let mut classifier = LogisticRegressorBuilder::new(false)
-            .scaler(ScalerState::ZScore)
+            .scaler(ScalerState::None)
             .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7));
         classifier.fit(&dataset, "Outcome");
         let predictions = classifier.predict();
