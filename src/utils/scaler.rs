@@ -117,12 +117,12 @@ impl Scaler {
             }
         }
     }
-    
+
     pub fn transform(&self, data: &mut ArrayViewMut2<f64>) {
         //should not be called without fitting!
         //assert!(self.maxes_stds.len() != 0);
         match self.state {
-            ScalerState::None => {},
+            ScalerState::None => {}
             ScalerState::MinMax => {
                 for (index, mut col) in data.columns_mut().into_iter().enumerate() {
                     for elem in col.iter_mut() {
@@ -130,7 +130,7 @@ impl Scaler {
                             / (self.maxes_stds[index] - self.mins_means[index])
                     }
                 }
-            },
+            }
             ScalerState::ZScore => {
                 for (index, mut col) in data.columns_mut().into_iter().enumerate() {
                     for elem in col.iter_mut() {

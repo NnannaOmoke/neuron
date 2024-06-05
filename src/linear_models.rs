@@ -99,13 +99,15 @@ impl LinearRegressorBuilder {
         let mut scaler = Scaler::from(&self.scaler);
         scaler.fit(self.strategy_data.get_train().0);
         scaler.transform(&mut self.strategy_data.get_train_mut().0);
-        match self.strategy{
-            TrainTestSplitStrategy::TrainTest(_) => scaler.transform(&mut self.strategy_data.get_test_mut().0),
+        match self.strategy {
+            TrainTestSplitStrategy::TrainTest(_) => {
+                scaler.transform(&mut self.strategy_data.get_test_mut().0)
+            }
             TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
                 scaler.transform(&mut self.strategy_data.get_test_mut().0);
                 scaler.transform(&mut self.strategy_data.get_eval_mut().0);
             }
-            _ => {},
+            _ => {}
         };
         self.tfit();
     }
@@ -139,20 +141,16 @@ impl LinearRegressorBuilder {
     pub fn evaluate<F>(&self, function: F) -> Vec<f64>
     //using a vec because user evaluation functions might return maybe one value or three
     //all the functions we plan to build in will only return one value, however
-    where F: Fn(ArrayView1<f64>, ArrayView1<f64>) -> Vec<f64>
-    {   
-        let (features, ground_truth) = match self.strategy{
+    where
+        F: Fn(ArrayView1<f64>, ArrayView1<f64>) -> Vec<f64>,
+    {
+        let (features, ground_truth) = match self.strategy {
             TrainTestSplitStrategy::None => {
                 //get train data
                 self.strategy_data.get_train()
-            },
-            TrainTestSplitStrategy::TrainTest(_) =>{
-               self.strategy_data.get_test()
-                
-            },
-            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
-                self.strategy_data.get_eval()
             }
+            TrainTestSplitStrategy::TrainTest(_) => self.strategy_data.get_test(),
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => self.strategy_data.get_eval(),
         };
         let preds = self.predict_external(features);
         let preds = Array1::from_vec(preds);
@@ -311,13 +309,15 @@ impl LogisticRegressorBuilder {
         let mut scaler = Scaler::from(&self.scaler);
         scaler.fit(self.data.get_train().0);
         scaler.transform(&mut self.data.get_train_mut().0);
-        match self.strategy{
-            TrainTestSplitStrategy::TrainTest(_) => scaler.transform(&mut self.data.get_test_mut().0),
+        match self.strategy {
+            TrainTestSplitStrategy::TrainTest(_) => {
+                scaler.transform(&mut self.data.get_test_mut().0)
+            }
             TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
                 scaler.transform(&mut self.data.get_test_mut().0);
                 scaler.transform(&mut self.data.get_eval_mut().0);
             }
-            _ => {},
+            _ => {}
         };
         self.tfit(nlabels)
     }
@@ -448,8 +448,8 @@ mod tests {
         .unwrap();
         let mut learner = LinearRegressorBuilder::new(false)
             .scaler(utils::scaler::ScalerState::ZScore)
-            .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::None
-            ).regularizer(LinearRegularizer::Lasso(0.1, 10));
+            .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::None)
+            .regularizer(LinearRegularizer::Lasso(0.1, 10));
 
         learner.fit(&dataset, "MEDV");
         let preds = learner.predict();

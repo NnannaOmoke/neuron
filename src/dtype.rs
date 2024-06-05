@@ -947,4 +947,46 @@ macro_rules! dtype_arithmetic {
     };
 }
 
-dtype_arithmetic!(u8, u16, u32, u64, u128, i8, i16, i32, i64, i128, f32, f64);
+#[macro_export]
+macro_rules! dtype {
+
+    ($($val: expr)?) => {
+        {
+            #[inline(always)]
+            fn is_string<T>(_x: &'static T) -> bool{
+                std::any::TypeId::of::<&'static str>() == std::any::TypeId::of::<T>()
+            }
+            $(
+                let is_string = is_string(&$val);
+                if is_string{
+                    DType::Object(Box::new($val.to_string()))
+                }
+                else{
+                    DType::parse_from_str(&stringify!($val), false)
+                }
+            )?
+        }
+    };
+}
+
+dtype_arithmetic!(u8, u16, u32, u64, u128, i8, i16, i32, i64, i128, f32, f64, usize, isize);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dtype_basic_arith_test() {
+        let init = DType::F32(100.0);
+        //assert_eq!(init/10, DType::F32(10.0));
+        assert_eq!(init / 0, DType::None);
+    }
+
+    #[test]
+    fn dtype_macro() {
+        let init = dtype!("459");
+        let number = dtype!(500.0);
+        assert_eq!(DType::F32(500.0), number);
+        assert_eq!(DType::Object(Box::new(String::from("459"))), init);
+    }
+}
