@@ -3,7 +3,7 @@ use ndarray::ArrayViewMut2;
 use super::*;
 use crate::{base_array::base_dataset::BaseDataset, dtype::DType, *};
 
-#[derive(Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub enum ScalerState {
     #[default]
     None,
@@ -11,7 +11,7 @@ pub enum ScalerState {
     ZScore,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Scaler {
     state: ScalerState,
     mins_means: Vec<f64>,
@@ -78,45 +78,46 @@ impl ScalerState {
 }
 
 impl Scaler {
-    pub fn fit(&mut self, data: &ArrayView2<f64>) {
+    pub fn fit(&mut self, data: ArrayView2<f64>) {
         match self.state {
-            ScalerState::None => {},
+            ScalerState::None => {}
             ScalerState::MinMax => {
-                let mut mins: Vec<f64> = vec![];
-                let mut maxes: Vec<f64> = vec![];
-                for (_, col) in data.columns().into_iter().enumerate() {
+                let mut mins = vec![];
+                let mut maxes = vec![];
+                for col in data.columns() {
                     mins.push(
-                        col.map(|x| NotNan::<f64>::from_f64(*x).unwrap())
-                            .iter()
+                        col.iter()
+                            .map(|x| NotNan::new(*x).unwrap())
                             .min()
                             .unwrap()
                             .to_f64()
                             .unwrap(),
                     );
                     maxes.push(
-                        col.map(|x| NotNan::<f64>::from_f64(*x).unwrap())
-                            .iter()
+                        col.iter()
+                            .map(|x| NotNan::new(*x).unwrap())
                             .max()
                             .unwrap()
                             .to_f64()
                             .unwrap(),
-                    );
+                    )
                 }
-                self.maxes_stds = maxes;
                 self.mins_means = mins;
+                self.maxes_stds = maxes;
             }
             ScalerState::ZScore => {
-                let mut stds: Vec<f64> = vec![];
-                let mut means: Vec<f64> = vec![];
-                for (_, col) in data.columns().into_iter().enumerate() {
-                    stds.push(col.std(0f64));
-                    means.push(col.mean().unwrap());
+                let mut stds = vec![];
+                let mut means = vec![];
+                for col in data.columns() {
+                    stds.push(col.std(1.0));
+                    means.push(col.mean().unwrap())
                 }
                 self.mins_means = means;
                 self.maxes_stds = stds;
             }
         }
     }
+    
     pub fn transform(&self, data: &mut ArrayViewMut2<f64>) {
         //should not be called without fitting!
         //assert!(self.maxes_stds.len() != 0);
@@ -125,7 +126,7 @@ impl Scaler {
             ScalerState::MinMax => {
                 for (index, mut col) in data.columns_mut().into_iter().enumerate() {
                     for elem in col.iter_mut() {
-                        *elem = (&*elem - self.mins_means[index])
+                        *elem = (*elem - self.mins_means[index])
                             / (self.maxes_stds[index] - self.mins_means[index])
                     }
                 }
@@ -133,7 +134,7 @@ impl Scaler {
             ScalerState::ZScore => {
                 for (index, mut col) in data.columns_mut().into_iter().enumerate() {
                     for elem in col.iter_mut() {
-                        *elem = (&*elem - self.mins_means[index]) / self.maxes_stds[index]
+                        *elem = (*elem - self.mins_means[index]) / self.maxes_stds[index]
                     }
                 }
             }
@@ -144,7 +145,7 @@ impl Scaler {
 impl From<&ScalerState> for Scaler {
     fn from(value: &ScalerState) -> Self {
         Self {
-            state: value.clone(),
+            state: *value,
             mins_means: Vec::default(),
             maxes_stds: Vec::default(),
         }

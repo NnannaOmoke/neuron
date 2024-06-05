@@ -883,3 +883,68 @@ impl Hash for DType {
         };
     }
 }
+
+macro_rules! dtype_arithmetic {
+    ($($typ: ty), +) => {
+            $(
+                use DType::*;
+                impl Add<$typ> for DType{
+                        type Output = DType;
+                        fn add(self, rhs: $typ) -> Self::Output{
+                            match self{
+                                U32(val) => U32(val + (rhs as u32)),
+                                U64(val) => U64(val + (rhs as u64)),
+                                F32(val) => F32(val + (rhs as f32)),
+                                F64(val) => F64(val + (rhs as f64)),
+                                None => None,
+                                Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES)
+                            }
+                        }
+                }
+                impl Sub<$typ> for DType{
+                    type Output = DType;
+                    fn sub(self, rhs: $typ) -> Self::Output{
+                        match self{
+                            U32(val) => U32(val - (rhs as u32)),
+                            U64(val) => U64(val - (rhs as u64)),
+                            F32(val) => F32(val - (rhs as f32)),
+                            F64(val) => F64(val - (rhs as f64)),
+                            None => None,
+                            Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES)
+                        }
+                    }
+                }
+                impl Mul<$typ> for DType{
+                    type Output = DType;
+                    fn mul(self, rhs: $typ) -> Self::Output{
+                        match self{
+                            U32(val) => U32(val * (rhs as u32)),
+                            U64(val) => U64(val * (rhs as u64)),
+                            F32(val) => F32(val * (rhs as f32)),
+                            F64(val) => F64(val * (rhs as f64)),
+                            None => None,
+                            Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES)
+                        }
+                    }
+                }
+                impl Div<$typ> for DType{
+                    type Output = DType;
+                    fn div(self, rhs: $typ) -> Self::Output{
+                        if rhs == <$typ>::zero(){
+                            return None;
+                        }
+                        match self{
+                            U32(val) => U32(val / (rhs as u32)),
+                            U64(val) => U64(val / (rhs as u64)),
+                            F32(val) => F32(val / (rhs as f32)),
+                            F64(val) => F64(val / (rhs as f64)),
+                            None => None,
+                            Object(_) => panic!("{}", ERR_MSG_INCOMPAT_TYPES)
+                        }
+                    }
+                }
+            )*
+    };
+}
+
+dtype_arithmetic!(u8, u16, u32, u64, u128, i8, i16, i32, i64, i128, f32, f64);

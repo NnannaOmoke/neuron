@@ -15,10 +15,7 @@ use crate::{
     dtype::DType,
     utils::{
         linalg::{dot, solve_linear_systems},
-        model_selection::{
-            self, TrainTestSplitStrategy,
-            TrainTestSplitStrategyData,
-        },
+        model_selection::{self, TrainTestSplitStrategy, TrainTestSplitStrategyData},
         scaler::{Scaler, ScalerState},
     },
     *,
@@ -100,10 +97,16 @@ impl LinearRegressorBuilder {
         self.strategy_data =
             TrainTestSplitStrategyData::<f64, f64>::new_r(dataset, self.target_col, self.strategy);
         let mut scaler = Scaler::from(&self.scaler);
-        scaler.fit(&self.strategy_data.get_train().0);
+        scaler.fit(self.strategy_data.get_train().0);
         scaler.transform(&mut self.strategy_data.get_train_mut().0);
-        scaler.transform(&mut self.strategy_data.get_test_mut().0);
-        scaler.transform(&mut self.strategy_data.get_test_mut().0);
+        match self.strategy{
+            TrainTestSplitStrategy::TrainTest(_) => scaler.transform(&mut self.strategy_data.get_test_mut().0),
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
+                scaler.transform(&mut self.strategy_data.get_test_mut().0);
+                scaler.transform(&mut self.strategy_data.get_eval_mut().0);
+            }
+            _ => {},
+        };
         self.tfit();
     }
 
@@ -115,7 +118,6 @@ impl LinearRegressorBuilder {
                 .unwrap();
         }
         let (features, target) = self.strategy_data.get_train();
-        dbg!(&features, &target);
         let weights = match self.regularizer {
             LinearRegularizer::None => Self::non_regularizing_fit(features.view(), target),
             LinearRegularizer::Ridge(var) => Self::ridge_regularizing_fit(features, target, var),
@@ -132,6 +134,29 @@ impl LinearRegressorBuilder {
         } else {
             self.weights = weights.to_vec();
         }
+    }
+
+    pub fn evaluate<F>(&self, function: F) -> Vec<f64>
+    //using a vec because user evaluation functions might return maybe one value or three
+    //all the functions we plan to build in will only return one value, however
+    where F: Fn(ArrayView1<f64>, ArrayView1<f64>) -> Vec<f64>
+    {   
+        let (features, ground_truth) = match self.strategy{
+            TrainTestSplitStrategy::None => {
+                //get train data
+                self.strategy_data.get_train()
+            },
+            TrainTestSplitStrategy::TrainTest(_) =>{
+               self.strategy_data.get_test()
+                
+            },
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
+                self.strategy_data.get_eval()
+            }
+        };
+        let preds = self.predict_external(features);
+        let preds = Array1::from_vec(preds);
+        function(ground_truth, preds.view())
     }
 
     fn non_regularizing_fit(features: ArrayView2<f64>, target: ArrayView1<f64>) -> Array1<f64> {
@@ -284,12 +309,19 @@ impl LogisticRegressorBuilder {
             self.strategy,
         );
         let mut scaler = Scaler::from(&self.scaler);
-        scaler.fit(&self.data.get_train().0);
+        scaler.fit(self.data.get_train().0);
         scaler.transform(&mut self.data.get_train_mut().0);
-        scaler.transform(&mut self.data.get_test_mut().0);
-        scaler.transform(&mut self.data.get_eval_mut().0);
+        match self.strategy{
+            TrainTestSplitStrategy::TrainTest(_) => scaler.transform(&mut self.data.get_test_mut().0),
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
+                scaler.transform(&mut self.data.get_test_mut().0);
+                scaler.transform(&mut self.data.get_eval_mut().0);
+            }
+            _ => {},
+        };
         self.tfit(nlabels)
     }
+
     pub fn tfit(&mut self, nclasses: usize) {
         if self.include_bias {
             self.data
@@ -303,7 +335,7 @@ impl LogisticRegressorBuilder {
         } else if nclasses > 2 {
             unimplemented!()
         } else {
-            panic!("Only one target column!")
+            panic!("Only one target class!")
         };
         if self.include_bias {
             self.weights = weights.to_vec()[..weights.len() - 1].to_vec();
@@ -414,16 +446,14 @@ mod tests {
             b',',
         )
         .unwrap();
-        let mut learner = LinearRegressorBuilder::new(true)
+        let mut learner = LinearRegressorBuilder::new(false)
             .scaler(utils::scaler::ScalerState::ZScore)
-            .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::TrainTest(
-                0.7,
-            ))
-            .regularizer(LinearRegularizer::None);
+            .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::None
+            ).regularizer(LinearRegularizer::Lasso(0.1, 10));
 
         learner.fit(&dataset, "MEDV");
         let preds = learner.predict();
-        let exact = learner.strategy_data.get_test().1.to_vec();
+        let exact = learner.strategy_data.get_train().1.to_vec();
         let mae = utils::metrics::mean_abs_error(&exact, &preds);
         let rmse = utils::metrics::root_mean_square_error(&exact, &preds);
         let mse = utils::metrics::mean_squared_error(&exact, &preds);
