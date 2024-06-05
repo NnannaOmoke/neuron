@@ -158,7 +158,7 @@ impl Debug for GpuContext {
     }
 }
 
-#[derive(Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub enum DeviceSelector<F>
 where
     // I hate this so much but I honestly don't know if collecting them into a vec and passing that
@@ -171,7 +171,20 @@ where
     Custom(F),
 }
 
-#[derive(Debug, Default)]
+impl<F> Debug for DeviceSelector<F>
+where
+    F: FnOnce(&mut dyn Iterator<Item = Arc<PhysicalDevice>>) -> (Arc<PhysicalDevice>, u32),
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::HighPower => f.write_str("HighPower"),
+            Self::LowPower => f.write_str("LowPower"),
+            Self::Custom(_) => f.write_str("Custom({<F>}"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
 pub enum QueueFamilySelector {
     // This assumes that the implementation will put its preferred queue families first.
     #[default]
@@ -290,6 +303,28 @@ fn select_device_and_queue_family(
                 DeviceSelector::Custom(_) => unreachable!(),
             }
             .ok_or(Error::NoVulkanComputingDevices)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gpu_context_new() {
+        for device_selector in [
+            DeviceSelector::HighPower,
+            DeviceSelector::LowPower,
+            DeviceSelector::Custom(|i| (i.next().unwrap(), 0)),
+        ] {
+            for queue_family_selector in
+                [QueueFamilySelector::First, QueueFamilySelector::MostQueues]
+            {
+                println!("Attempting to create GpuContext using device selector {:?} and queue family selector \
+                    {queue_family_selector:?}...", device_selector.clone());
+                GpuContext::new(device_selector.clone(), queue_family_selector).unwrap();
+            }
         }
     }
 }
