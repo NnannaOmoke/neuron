@@ -13,7 +13,7 @@ use vulkano::{
     },
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
-        Device, DeviceCreateInfo, Queue, QueueCreateInfo, QueueFlags,
+        Device, DeviceCreateInfo, DeviceOwned, Queue, QueueCreateInfo, QueueFlags,
     },
     instance::{Instance, InstanceCreateInfo},
     library::VulkanLibrary,
@@ -28,10 +28,71 @@ pub struct GpuContext {
     memory_allocator: StandardMemoryAllocator,
     command_buffer_allocator: StandardCommandBufferAllocator,
     // Likely going to change this method of storage or remove it.
-    buffers: Vec<Arc<Buffer>>,
+    held_buffers: Vec<Arc<Buffer>>,
 }
 
 impl GpuContext {
+    pub fn from_raw_parts(
+        device: Arc<Device>,
+        queue_family_index: u32,
+        queues: Box<[Arc<Queue>]>,
+        memory_allocator: StandardMemoryAllocator,
+        command_buffer_allocator: StandardCommandBufferAllocator,
+        held_buffers: Vec<Arc<Buffer>>,
+    ) -> Result<GpuContext, Error> {
+        fn e(
+            device: Arc<Device>,
+            got: &Arc<Device>,
+            arg: &'static str,
+        ) -> Result<GpuContext, Error> {
+            Err(Error::WrongDevice {
+                expected_device: device,
+                got_device: got.clone(),
+                offending_argument: Some(arg),
+            })
+        }
+
+        if !device
+            .active_queue_family_indices()
+            .contains(&queue_family_index)
+        {
+            return Err(Error::InvalidQueueFamilyIndexDevice {
+                index: queue_family_index,
+                device,
+            });
+        }
+        for queue in queues.iter().cloned() {
+            if queue.device() != &device {
+                return e(device, queue.device(), "queues");
+            }
+        }
+        if memory_allocator.device() != &device {
+            return e(device, memory_allocator.device(), "memory_allocator");
+        }
+        if command_buffer_allocator.device() != &device {
+            return e(
+                device,
+                command_buffer_allocator.device(),
+                "command_buffer_allocator",
+            );
+        }
+        for buffer in held_buffers.iter() {
+            if buffer.device() != &device {
+                return e(device, buffer.device(), "queues");
+            }
+        }
+
+        Ok(Self {
+            device,
+            queue_family_index,
+            queues,
+            next_queue: Arc::new(Mutex::new(0)),
+            memory_allocator,
+            command_buffer_allocator,
+            held_buffers,
+        })
+    }
+
     pub fn new(
         device_preference: DeviceSelector<
             impl FnOnce(&mut dyn Iterator<Item = Arc<PhysicalDevice>>) -> (Arc<PhysicalDevice>, u32),
@@ -79,7 +140,7 @@ impl GpuContext {
             next_queue: Arc::new(Mutex::new(0)),
             memory_allocator,
             command_buffer_allocator,
-            buffers: Vec::new(),
+            held_buffers: Vec::new(),
         })
     }
 }
@@ -97,7 +158,7 @@ impl Debug for GpuContext {
     }
 }
 
-#[derive(Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub enum DeviceSelector<F>
 where
     // I hate this so much but I honestly don't know if collecting them into a vec and passing that
@@ -110,7 +171,20 @@ where
     Custom(F),
 }
 
-#[derive(Debug, Default)]
+impl<F> Debug for DeviceSelector<F>
+where
+    F: FnOnce(&mut dyn Iterator<Item = Arc<PhysicalDevice>>) -> (Arc<PhysicalDevice>, u32),
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::HighPower => f.write_str("HighPower"),
+            Self::LowPower => f.write_str("LowPower"),
+            Self::Custom(_) => f.write_str("Custom({<F>}"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
 pub enum QueueFamilySelector {
     // This assumes that the implementation will put its preferred queue families first.
     #[default]
@@ -122,11 +196,15 @@ pub enum QueueFamilySelector {
 pub enum Error {
     #[error("device selector condition failed")]
     DeviceSelectorFailed,
-    #[error("{index} is not an index for a valid queue family for physical device {device:?}")]
-    InvalidQueueFamilyIndex {
+    #[error(
+        "{index} is not an index for a valid queue family for physical device {physical_device:?}"
+    )]
+    InvalidQueueFamilyIndexPhysicalDevice {
         index: u32,
-        device: Arc<PhysicalDevice>,
+        physical_device: Arc<PhysicalDevice>,
     },
+    #[error("{index} is not an index for a valid queue family for vulkano device {device:?}")]
+    InvalidQueueFamilyIndexDevice { index: u32, device: Arc<Device> },
     #[error(transparent)]
     LibraryLoading(#[from] vulkano::library::LoadingError),
     #[error("no physical devices that support Vulkan also support computing")]
@@ -137,6 +215,13 @@ pub enum Error {
     VulkanValidated(#[from] vulkano::Validated<vulkano::VulkanError>),
     #[error(transparent)]
     Vulkan(#[from] vulkano::VulkanError),
+    #[error("device of provided value was not the expected device")]
+    WrongDevice {
+        expected_device: Arc<Device>,
+        got_device: Arc<Device>,
+        /// (If applicable) the argument, field, etc whose passed value
+        offending_argument: Option<&'static str>,
+    },
 }
 
 fn select_device_and_queue_family(
@@ -151,9 +236,9 @@ fn select_device_and_queue_family(
             let mut capture = physical_devices;
             let res = f(&mut capture);
             if res.1 >= res.0.queue_family_properties().len() as u32 {
-                Err(Error::InvalidQueueFamilyIndex {
+                Err(Error::InvalidQueueFamilyIndexPhysicalDevice {
                     index: res.1,
-                    device: res.0,
+                    physical_device: res.0,
                 })
             } else {
                 Ok(res)
@@ -218,6 +303,28 @@ fn select_device_and_queue_family(
                 DeviceSelector::Custom(_) => unreachable!(),
             }
             .ok_or(Error::NoVulkanComputingDevices)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gpu_context_new() {
+        for device_selector in [
+            DeviceSelector::HighPower,
+            DeviceSelector::LowPower,
+            DeviceSelector::Custom(|i| (i.next().unwrap(), 0)),
+        ] {
+            for queue_family_selector in
+                [QueueFamilySelector::First, QueueFamilySelector::MostQueues]
+            {
+                println!("Attempting to create GpuContext using device selector {:?} and queue family selector \
+                    {queue_family_selector:?}...", device_selector.clone());
+                GpuContext::new(device_selector.clone(), queue_family_selector).unwrap();
+            }
         }
     }
 }
