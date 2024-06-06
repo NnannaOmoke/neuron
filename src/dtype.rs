@@ -943,13 +943,36 @@ macro_rules! dtype_arithmetic {
                         }
                     }
                 }
+
+                impl AddAssign<$typ> for DType{
+                    fn add_assign(&mut self, rhs: $typ){
+                        *self = self.clone() + rhs;
+                    }
+                }
+
+                impl SubAssign<$typ> for DType{
+                    fn sub_assign(&mut self, rhs: $typ){
+                        *self = self.clone() - rhs;
+                    }
+                }
+
+                impl DivAssign<$typ> for DType{
+                    fn div_assign(&mut self, rhs: $typ){
+                        *self = self.clone() / rhs;
+                    }
+                }
+
+                impl MulAssign<$typ> for DType{
+                    fn mul_assign(&mut self, rhs: $typ){
+                        *self = self.clone() * rhs;
+                    }
+                }
             )*
     };
 }
 
 #[macro_export]
 macro_rules! dtype {
-
     ($($val: expr)?) => {
         {
             #[inline(always)]
@@ -977,8 +1000,9 @@ mod tests {
 
     #[test]
     fn dtype_basic_arith_test() {
-        let init = DType::F32(100.0);
-        //assert_eq!(init/10, DType::F32(10.0));
+        let mut init = DType::F32(100.0);
+        init -= 90;
+        assert_eq!(DType::F32(10.0), init);
         assert_eq!(init / 0, DType::None);
     }
 
@@ -988,5 +1012,13 @@ mod tests {
         let number = dtype!(500.0);
         assert_eq!(DType::F32(500.0), number);
         assert_eq!(DType::Object(Box::new(String::from("459"))), init);
+    }
+
+    #[test]
+    #[should_panic]
+    fn none_type_test(){
+        let string_val = dtype!("Gello");
+        let _ = string_val * 100;
+        
     }
 }
