@@ -21,6 +21,7 @@ use crate::{
     *,
 };
 
+
 pub struct LinearRegressorBuilder {
     weights: Vec<f64>,
     bias: f64,

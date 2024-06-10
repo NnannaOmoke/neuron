@@ -34,6 +34,7 @@ impl<F: Default + Clone, L: Default + Clone> TrainTestSplitStrategyData<F, L> {
         target_col: usize,
         strategy: TrainTestSplitStrategy,
     ) -> TrainTestSplitStrategyData<f64, f64> {
+        
         let array = dataset.into_f64_array_without_target(target_col);
         let target = dataset.get_col(target_col).map(|x| x.to_f64().unwrap());
         match strategy {
