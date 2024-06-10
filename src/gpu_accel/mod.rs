@@ -20,26 +20,21 @@ use vulkano::{
     memory::allocator::StandardMemoryAllocator,
 };
 
+#[derive(Clone)]
 pub struct GpuContext {
     device: Arc<Device>,
     queue_family_index: u32,
     queues: Box<[Arc<Queue>]>,
     next_queue: Arc<Mutex<usize>>,
-    memory_allocator: StandardMemoryAllocator,
-    command_buffer_allocator: StandardCommandBufferAllocator,
-    // Likely going to change this method of storage or remove it.
-    held_buffers: Vec<Arc<Buffer>>,
+    memory_allocator: Arc<StandardMemoryAllocator>,
+    command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+    // This is problematic as a lot of stuff uses SubBuffer's instead which are genericly
+    // typed which itself is a problem here. We'll see if this is really necessary.
+    // held_buffers: Vec<Arc<Buffer>>,
 }
 
 impl GpuContext {
-    pub fn from_raw_parts(
-        device: Arc<Device>,
-        queue_family_index: u32,
-        queues: Box<[Arc<Queue>]>,
-        memory_allocator: StandardMemoryAllocator,
-        command_buffer_allocator: StandardCommandBufferAllocator,
-        held_buffers: Vec<Arc<Buffer>>,
-    ) -> Result<GpuContext, Error> {
+    pub fn from_raw_parts(parts: GpuContextParts) -> Result<Self, Error> {
         fn e(
             device: Arc<Device>,
             got: &Arc<Device>,
@@ -52,45 +47,55 @@ impl GpuContext {
             })
         }
 
-        if !device
+        if !parts
+            .device
             .active_queue_family_indices()
-            .contains(&queue_family_index)
+            .contains(&parts.queue_family_index)
         {
             return Err(Error::InvalidQueueFamilyIndexDevice {
-                index: queue_family_index,
-                device,
+                index: parts.queue_family_index,
+                device: parts.device,
             });
         }
-        for queue in queues.iter().cloned() {
-            if queue.device() != &device {
-                return e(device, queue.device(), "queues");
+        for queue in parts.queues.iter().cloned() {
+            if queue.device() != &parts.device {
+                return e(parts.device, queue.device(), "queues");
             }
         }
-        if memory_allocator.device() != &device {
-            return e(device, memory_allocator.device(), "memory_allocator");
-        }
-        if command_buffer_allocator.device() != &device {
+        if parts.memory_allocator.device() != &parts.device {
             return e(
-                device,
-                command_buffer_allocator.device(),
+                parts.device,
+                parts.memory_allocator.device(),
+                "memory_allocator",
+            );
+        }
+        if parts.command_buffer_allocator.device() != &parts.device {
+            return e(
+                parts.device,
+                parts.command_buffer_allocator.device(),
                 "command_buffer_allocator",
             );
         }
-        for buffer in held_buffers.iter() {
-            if buffer.device() != &device {
-                return e(device, buffer.device(), "queues");
-            }
-        }
 
         Ok(Self {
-            device,
-            queue_family_index,
-            queues,
-            next_queue: Arc::new(Mutex::new(0)),
-            memory_allocator,
-            command_buffer_allocator,
-            held_buffers,
+            device: parts.device,
+            queue_family_index: parts.queue_family_index,
+            queues: parts.queues,
+            next_queue: parts.next_queue,
+            memory_allocator: parts.memory_allocator,
+            command_buffer_allocator: parts.command_buffer_allocator,
         })
+    }
+
+    pub fn into_raw_parts(self) -> GpuContextParts {
+        GpuContextParts {
+            device: self.device,
+            queue_family_index: self.queue_family_index,
+            queues: self.queues,
+            next_queue: self.next_queue,
+            memory_allocator: self.memory_allocator,
+            command_buffer_allocator: self.command_buffer_allocator,
+        }
     }
 
     pub fn new(
@@ -98,7 +103,7 @@ impl GpuContext {
             impl FnOnce(&mut dyn Iterator<Item = Arc<PhysicalDevice>>) -> (Arc<PhysicalDevice>, u32),
         >,
         queue_family_preference: QueueFamilySelector,
-    ) -> Result<GpuContext, Error> {
+    ) -> Result<Self, Error> {
         let library = VulkanLibrary::new()?;
         let instance = Instance::new(library, InstanceCreateInfo::default())?;
         trace!("Created Vulkan library and instance.");
@@ -127,11 +132,11 @@ impl GpuContext {
         trace!("Created device.");
         let queues = queues_iter.collect::<Vec<_>>().into_boxed_slice();
 
-        let memory_allocator = StandardMemoryAllocator::new_default(device.clone());
-        let command_buffer_allocator = StandardCommandBufferAllocator::new(
+        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
+        let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
             device.clone(),
             StandardCommandBufferAllocatorCreateInfo::default(),
-        );
+        ));
 
         Ok(Self {
             device,
@@ -140,7 +145,6 @@ impl GpuContext {
             next_queue: Arc::new(Mutex::new(0)),
             memory_allocator,
             command_buffer_allocator,
-            held_buffers: Vec::new(),
         })
     }
 }
@@ -158,11 +162,34 @@ impl Debug for GpuContext {
     }
 }
 
+#[derive(Clone)]
+pub struct GpuContextParts {
+    pub device: Arc<Device>,
+    pub queue_family_index: u32,
+    pub queues: Box<[Arc<Queue>]>,
+    pub next_queue: Arc<Mutex<usize>>,
+    pub memory_allocator: Arc<StandardMemoryAllocator>,
+    pub command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+}
+
+impl Debug for GpuContextParts {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GpuContextParts")
+            .field("device", &self.device)
+            .field("queue_family_index", &self.queue_family_index)
+            .field("queues", &self.queues)
+            .field("next_queue", &self.next_queue)
+            .field("memory_allocator", &self.memory_allocator)
+            .field("command_buffer_allocator", &"_")
+            .finish()
+    }
+}
+
 #[derive(Clone, Default, PartialEq)]
 pub enum DeviceSelector<F>
 where
-    // I hate this so much but I honestly don't know if collecting them into a vec and passing that
-    // would be better.
+    // I hate this so much but I honestly don't know if collecting them into a vec and
+    // passing that would be better.
     F: FnOnce(&mut dyn Iterator<Item = Arc<PhysicalDevice>>) -> (Arc<PhysicalDevice>, u32),
 {
     #[default]
@@ -222,6 +249,43 @@ pub enum Error {
         /// (If applicable) the argument, field, etc whose passed value
         offending_argument: Option<&'static str>,
     },
+}
+
+pub fn default_custom_target(
+    physical_devices: &mut dyn Iterator<Item = Arc<PhysicalDevice>>,
+) -> (Arc<PhysicalDevice>, u32) {
+    // Yanked from select_device_and_queue_family.
+    physical_devices
+        .filter_map(|pd| {
+            let mut queue_family_iter = pd.queue_family_properties()
+            .iter()
+            .enumerate()
+            .filter(|(i, qfp)| {
+                let res = qfp.queue_flags.contains(QueueFlags::COMPUTE);
+                if res {
+                    trace!("Found computing queue family ({qfp:?} at idx {i}) for device {pd:?}.")
+                } else {
+                    trace!("Found queue family ({qfp:?} at idx {i}) for device {pd:?} but it did not
+                        support computing workloads.");
+                }
+                res
+            });
+            let res = queue_family_iter
+                .next()
+                .map(|(qfi, _)| (pd.clone(), qfi as u32));
+            if let Some((pd, qfi)) = res.as_ref() {
+                debug!("Found compute-capable device ({pd:?}) with nominated QFI {qfi}");
+            } else {
+                debug!(
+                    "Found device ({pd:?}) but it did not have any queue families that supported \
+                compute workloads."
+                );
+            }
+            res
+        })
+        // TODO: Consider changing desired closure type to return Option<_> instead. I don't like this unwrap.
+        .next()
+        .unwrap()
 }
 
 fn select_device_and_queue_family(
@@ -307,8 +371,18 @@ fn select_device_and_queue_family(
     }
 }
 
+pub type DeviceSelectorCustomFnPtr =
+    fn(&mut dyn Iterator<Item = Arc<PhysicalDevice>>) -> (Arc<PhysicalDevice>, u32);
+
 #[cfg(test)]
 mod tests {
+    use std::alloc::Layout;
+
+    use vulkano::{
+        buffer::{BufferCreateFlags, BufferCreateInfo, BufferUsage},
+        memory::allocator::{AllocationCreateInfo, DeviceLayout},
+    };
+
     use super::*;
 
     #[test]
@@ -326,5 +400,76 @@ mod tests {
                 GpuContext::new(device_selector.clone(), queue_family_selector).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn gpu_context_from_raw_parts() {
+        // Assumes into_raw_parts does what it's supposed to bc it's that simple of a fn.
+        #[inline]
+        fn c() -> GpuContextParts {
+            GpuContext::new(
+                DeviceSelector::<DeviceSelectorCustomFnPtr>::HighPower,
+                QueueFamilySelector::First,
+            )
+            .unwrap()
+            .into_raw_parts()
+        }
+
+        #[inline]
+        fn was_ok() {
+            panic!("should have paniced but didn't");
+        }
+
+        #[inline]
+        fn wrong_error_type(e: Error) {
+            panic!("from_raw_parts returned the wrong variant of error ({e:?})");
+        }
+
+        #[inline]
+        fn expect_wrong_device(parts: GpuContextParts, arg: &'static str) {
+            match GpuContext::from_raw_parts(parts) {
+                Ok(_) => was_ok(),
+                Err(e) => {
+                    if let Error::WrongDevice {
+                        offending_argument, ..
+                    } = e
+                    {
+                        assert_eq!(offending_argument.unwrap(), arg);
+                    } else {
+                        wrong_error_type(e);
+                    }
+                }
+            }
+        }
+
+        #[inline]
+        fn expect_bad_qfi(parts: GpuContextParts) {
+            match GpuContext::from_raw_parts(parts) {
+                Ok(_) => was_ok(),
+                Err(e) => match e {
+                    Error::InvalidQueueFamilyIndexDevice { .. } => {}
+                    o => wrong_error_type(o),
+                },
+            }
+        }
+
+        let other_ctx = c();
+        let basectx = c();
+        let mut testctx = basectx.clone();
+
+        testctx.queue_family_index = u32::MAX;
+        expect_bad_qfi(testctx);
+
+        testctx = basectx.clone();
+        testctx.queues = other_ctx.queues;
+        expect_wrong_device(testctx, "queues");
+
+        testctx = basectx.clone();
+        testctx.memory_allocator = other_ctx.memory_allocator;
+        expect_wrong_device(testctx, "memory_allocator");
+
+        testctx = basectx.clone();
+        testctx.command_buffer_allocator = other_ctx.command_buffer_allocator;
+        expect_wrong_device(testctx, "command_buffer_allocator");
     }
 }
