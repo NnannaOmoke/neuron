@@ -66,29 +66,6 @@ fn test_transpose() {
 }
 
 #[test]
-fn test_loader() {
-    // let dataset = BaseDataset::from_csv(
-    //     Path::new("src/base_array/test_data/diabetes.csv"),
-    //     false,
-    //     true,
-    //     b',',
-    // );
-    let dataset = BaseDataset::from_matrix(
-        BaseMatrix {
-            data: arr2(&[[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]).map(|v| DType::U32(*v)),
-        },
-        vec![
-            "one".to_string(),
-            "two".to_string(),
-            "three".to_string(),
-            "four".to_string(),
-        ],
-    );
-    dbg!(dataset.sum(&"three".to_string()));
-    panic!();
-}
-
-#[test]
 fn mem_usage() {
     let data = BaseDataset::from_csv(
         Path::new("src/base_array/test_data/Ames_Housing_Data.csv"),

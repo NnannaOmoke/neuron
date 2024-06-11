@@ -1016,9 +1016,8 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn none_type_test(){
+    fn none_type_test() {
         let string_val = dtype!("Gello");
         let _ = string_val * 100;
-        
     }
 }
