@@ -139,7 +139,7 @@ impl LinearRegressorBuilder {
         }
     }
 
-    pub fn evaluate<F>(&self, function: F) -> Vec<f64>
+    pub fn evaluate<F> (&self, function: F) -> Vec<f64>
     //using a vec because user evaluation functions might return maybe one value or three
     //all the functions we plan to build in will only return one value, however
     where
@@ -332,7 +332,7 @@ impl LogisticRegressorBuilder {
         }
         let (features, target) = self.data.get_train();
         let weights = if nclasses == 2 {
-            Self::binary_fit(features, target, 1060)
+            Self::binary_fit(features, target, 1000)
         } else if nclasses > 2 {
             unimplemented!()
         } else {
@@ -381,7 +381,7 @@ impl LogisticRegressorBuilder {
     ) -> Array2<f64> {
         let mut weights = Array1::ones(features.ncols());
         let mut gradients = Array2::from_elem((0, features.ncols()), 1f64);
-        let learning_rate = 0.01;
+        let learning_rate = 0.1;
         let (nrows, _) = (features.shape()[0], features.shape()[1]);
         for _ in 0..epochs {
             for elem in 0..nrows {
@@ -400,6 +400,7 @@ impl LogisticRegressorBuilder {
 
     fn predict_external(&self, data: &ArrayView2<f64>) -> Array1<u32> {
         let mut result = Array1::from_elem(data.nrows(), 0);
+        dbg!(self.weights(), self.bias);
         for (index, row) in data.rows().into_iter().enumerate() {
             let mut logit = 0f64;
             row.iter()
@@ -448,13 +449,13 @@ mod tests {
         )
         .unwrap();
         let mut learner = LinearRegressorBuilder::new(false)
-            .scaler(utils::scaler::ScalerState::ZScore)
-            .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::None)
-            .regularizer(LinearRegularizer::Lasso(0.1, 10));
+            .scaler(utils::scaler::ScalerState::MinMax)
+            .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::TrainTest(0.7))
+            .regularizer(LinearRegularizer::ElasticNet(0.3, 0.7, 10));
 
         learner.fit(&dataset, "MEDV");
         let preds = learner.predict();
-        let exact = learner.strategy_data.get_train().1.to_vec();
+        let exact = learner.strategy_data.get_test().1.to_vec();
         let mae = utils::metrics::mean_abs_error(&exact, &preds);
         let rmse = utils::metrics::root_mean_square_error(&exact, &preds);
         let mse = utils::metrics::mean_squared_error(&exact, &preds);
@@ -477,12 +478,11 @@ mod tests {
         )
         .unwrap();
         let mut classifier = LogisticRegressorBuilder::new(false)
-            .scaler(ScalerState::None)
+            .scaler(ScalerState::MinMax)
             .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7));
         classifier.fit(&dataset, "Outcome");
         let predictions = classifier.predict();
         let ground_truth = classifier.data.get_test().1;
-
         dbg!(accuracy(&ground_truth.to_vec(), &predictions.to_vec()));
     }
 }
