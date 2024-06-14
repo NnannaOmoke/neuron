@@ -11,7 +11,8 @@ use vulkano::{
         StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,
     },
     device::{
-        physical::{PhysicalDevice, PhysicalDeviceType}, Device, DeviceCreateInfo, DeviceOwned, Queue, QueueCreateInfo, QueueFlags,
+        physical::{PhysicalDevice, PhysicalDeviceType},
+        Device, DeviceCreateInfo, DeviceOwned, Queue, QueueCreateInfo, QueueFlags,
     },
     instance::{Instance, InstanceCreateInfo},
     memory::allocator::StandardMemoryAllocator,
