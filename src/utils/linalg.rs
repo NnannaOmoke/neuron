@@ -1,4 +1,4 @@
-use ndarray::{ArrayView1, ArrayViewMut2};
+use ndarray::{Array1, Array2, ArrayView1, ArrayViewMut2};
 
 use super::*;
 use crate::*;
@@ -60,4 +60,34 @@ pub fn dot(left: ArrayView1<f64>, right: ArrayView1<f64>) -> f64 {
 
 pub fn sigmoid(value: f64) -> f64 {
     1f64 / (1f64 + (value.neg().exp()))
+}
+
+pub fn softmax_1d(input_vector: ArrayView1<f64>) -> Array1<f64> {
+    let max = input_vector
+        .map(|x| NotNan::<f64>::new(*x).unwrap())
+        .iter()
+        .max()
+        .unwrap()
+        .to_f64()
+        .unwrap();
+    let mut intermediate = input_vector.to_owned() - max;
+    let exponented = intermediate
+        .iter_mut()
+        .map(|x| x.exp())
+        .collect::<Array1<f64>>();
+    let summed = exponented.sum();
+    exponented / summed
+}
+
+#[cfg(test)]
+mod tests {
+    use ndarray::array;
+
+    use super::softmax_1d;
+
+    #[test]
+    fn test_softmax() {
+        let array = array![3.0, 1.0, 0.2];
+        dbg!(softmax_1d(array.view()));
+    }
 }

@@ -264,6 +264,7 @@ struct LogisticRegressorBuilder {
     scaler: ScalerState,
     strategy: TrainTestSplitStrategy,
     data: TrainTestSplitStrategyData<f64, u32>,
+    regularizer: Option<f64>,
     target_index: usize,
     include_bias: bool,
 }
@@ -276,6 +277,7 @@ impl LogisticRegressorBuilder {
             scaler: ScalerState::None,
             strategy: TrainTestSplitStrategy::None,
             data: TrainTestSplitStrategyData::default(),
+            regularizer: None,
             target_index: 0,
             include_bias,
         }
@@ -295,6 +297,13 @@ impl LogisticRegressorBuilder {
 
     pub fn scaler(self, scaler: ScalerState) -> Self {
         Self { scaler, ..self }
+    }
+
+    pub fn regularizer(self, value: f64) -> Self {
+        Self {
+            regularizer: Some(value),
+            ..self
+        }
     }
 
     pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
@@ -331,7 +340,7 @@ impl LogisticRegressorBuilder {
         }
         let (features, target) = self.data.get_train();
         let weights = if nclasses == 2 {
-            Self::binary_fit(features, target, 1060)
+            Self::binary_fit(features, target, 50, self.regularizer)
         } else if nclasses > 2 {
             unimplemented!()
         } else {
@@ -344,75 +353,55 @@ impl LogisticRegressorBuilder {
             self.weights = weights.to_vec();
         }
     }
-    //uses the SAG(A)
+    //uses the SAG algorithm
     //another alternative for super-fast convergence is the irls
     pub fn binary_fit(
         features: ArrayView2<f64>,
         target: ArrayView1<u32>,
         epochs: usize,
+        l1_regularization: Option<f64>,
     ) -> Array1<f64> {
-        let mut weights = Array1::from_elem(features.ncols(), 1f64);
-        let mut gradients = Self::grad_stochastic_gradient_descent(features, target, 1);
-        let mut gradient_sum =
-            Array1::from_shape_fn(features.ncols(), |x| gradients.column(x).sum());
+        let (nrows, ncols) = (features.shape()[0], features.shape()[1]);
+        let mut weights = Array1::ones(ncols);
+        let mut grads = Array1::zeros(nrows);
+        let mut grad_sum = Array1::zeros(ncols);
         let mut rand_gen = rand::thread_rng();
-        let mut curr_rand_index = rand_gen.gen_range(0..target.len());
+        let mut choice = rand_gen.gen_range(0..target.len());
         let mut seen = 1;
         for _ in 0..epochs {
-            let current_x = features.row(curr_rand_index);
-            let current_y = target[curr_rand_index];
-            let predictions = utils::linalg::sigmoid(current_x.dot(&weights));
-            let gradient = current_x.t().to_owned() * (current_y as f64 - predictions);
-            gradient_sum =
-                gradient_sum - gradients.row(curr_rand_index).to_owned() + gradient.view();
-            gradients.row_mut(curr_rand_index).assign(&gradient);
-            weights = weights - ((0.01 / seen as f64) * gradient_sum.to_owned());
+            let curr_x = features.row(choice);
+            let curr_y = target[choice];
+            let predictions = utils::linalg::sigmoid(curr_x.dot(&weights));
+            let grad = curr_y as f64 - predictions;
+            grad_sum = grad_sum - (grads[choice] * curr_x.to_owned()) + grad;
+            grads[choice] = grad;
+            match l1_regularization {
+                Some(lambda) => {
+                    weights = ((1.0 - (0.01 * lambda)) * weights)
+                        - ((0.01 / seen as f64) * grad_sum.to_owned())
+                }
+                None => weights = weights - ((0.01 / seen as f64) * grad_sum.to_owned()),
+            };
             seen += 1;
-            curr_rand_index = rand_gen.gen_range(0..target.len());
+            choice = rand_gen.gen_range(0..target.len());
         }
         weights
     }
 
-    fn grad_stochastic_gradient_descent(
+    pub fn multinomial_fit(
         features: ArrayView2<f64>,
-        target: ArrayView1<u32>,
+        labels: ArrayView2<f64>,
         epochs: usize,
-    ) -> Array2<f64> {
-        let mut weights = Array1::ones(features.ncols());
-        let mut gradients = Array2::from_elem((0, features.ncols()), 1f64);
-        let learning_rate = 0.01;
-        let (nrows, _) = (features.shape()[0], features.shape()[1]);
-        for _ in 0..epochs {
-            for elem in 0..nrows {
-                let current_x = features.row(elem);
-                let current_y = target[elem];
-                let prediction = utils::linalg::sigmoid(current_x.dot(&weights.view()));
-                let current_gradient = (current_y as f64 - prediction) * current_x.to_owned();
-                gradients
-                    .push_row(current_gradient.view())
-                    .expect("Shape Error");
-                weights = weights - (learning_rate * current_gradient);
-            }
-        }
-        gradients
+        l1_regularization: Option<f64>,
+    ) {
     }
 
     fn predict_external(&self, data: &ArrayView2<f64>) -> Array1<u32> {
-        let mut result = Array1::from_elem(data.nrows(), 0);
-        for (index, row) in data.rows().into_iter().enumerate() {
-            let mut logit = 0f64;
-            row.iter()
-                .enumerate()
-                .for_each(|(cindex, data)| logit += self.weights[cindex] * data);
-            logit += self.bias;
-            logit = utils::linalg::sigmoid(logit);
-            if logit > 0.5 {
-                result[index] = 1;
-            } else {
-                result[index] = 0;
-            }
-        }
+        let weights_array = Array1::from_vec(self.weights.clone());
+        let result = data.dot(&weights_array);
         result
+            .map(|x| utils::linalg::sigmoid(*x).to_u32().unwrap())
+            .to_owned()
     }
 
     pub fn predict(&self) -> Array1<u32> {
@@ -447,13 +436,15 @@ mod tests {
         )
         .unwrap();
         let mut learner = LinearRegressorBuilder::new(false)
-            .scaler(utils::scaler::ScalerState::ZScore)
-            .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::None)
-            .regularizer(LinearRegularizer::Lasso(0.1, 10));
+            .scaler(utils::scaler::ScalerState::MinMax)
+            .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::TrainTest(
+                0.7,
+            ))
+            .regularizer(LinearRegularizer::ElasticNet(0.3, 0.7, 10));
 
         learner.fit(&dataset, "MEDV");
         let preds = learner.predict();
-        let exact = learner.strategy_data.get_train().1.to_vec();
+        let exact = learner.strategy_data.get_test().1.to_vec();
         let mae = utils::metrics::mean_abs_error(&exact, &preds);
         let rmse = utils::metrics::root_mean_square_error(&exact, &preds);
         let mse = utils::metrics::mean_squared_error(&exact, &preds);
@@ -476,12 +467,17 @@ mod tests {
         )
         .unwrap();
         let mut classifier = LogisticRegressorBuilder::new(false)
-            .scaler(ScalerState::None)
-            .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7));
+            .scaler(ScalerState::MinMax)
+            .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7))
+            .regularizer(0.01);
         classifier.fit(&dataset, "Outcome");
         let predictions = classifier.predict();
         let ground_truth = classifier.data.get_test().1;
-
         dbg!(accuracy(&ground_truth.to_vec(), &predictions.to_vec()));
+    }
+
+    #[test]
+    fn test_sigmoid() {
+        assert_eq!(utils::linalg::sigmoid(2.1), 0.8909031788043871);
     }
 }

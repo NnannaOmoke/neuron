@@ -109,7 +109,7 @@ impl Scaler {
                 let mut stds = vec![];
                 let mut means = vec![];
                 for col in data.columns() {
-                    stds.push(col.std(1.0));
+                    stds.push(col.std(0.0));
                     means.push(col.mean().unwrap())
                 }
                 self.mins_means = means;
