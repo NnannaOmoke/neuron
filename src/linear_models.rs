@@ -299,8 +299,11 @@ impl LogisticRegressorBuilder {
         Self { scaler, ..self }
     }
 
-    pub fn regularizer(self, value: f64) -> Self{
-        Self {regularizer: Some(value), ..self}
+    pub fn regularizer(self, value: f64) -> Self {
+        Self {
+            regularizer: Some(value),
+            ..self
+        }
     }
 
     pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
@@ -360,33 +363,45 @@ impl LogisticRegressorBuilder {
     ) -> Array1<f64> {
         let (nrows, ncols) = (features.shape()[0], features.shape()[1]);
         let mut weights = Array1::ones(ncols);
-        let mut gradients = Array1::zeros(nrows);
-        let mut gradient_sum = Array1::zeros(ncols);
+        let mut grads = Array1::zeros(nrows);
+        let mut grad_sum = Array1::zeros(ncols);
         let mut rand_gen = rand::thread_rng();
-        let mut curr_rand_index = rand_gen.gen_range(0..target.len());
+        let mut choice = rand_gen.gen_range(0..target.len());
         let mut seen = 1;
         for _ in 0..epochs {
-            let curr_x = features.row(curr_rand_index);
-            let curr_y = target[curr_rand_index];
+            let curr_x = features.row(choice);
+            let curr_y = target[choice];
             let predictions = utils::linalg::sigmoid(curr_x.dot(&weights));
-            let gradient = curr_y as f64 - predictions;
-            gradient_sum =
-                gradient_sum - (gradients[curr_rand_index] * curr_x.to_owned()) + gradient;
-            gradients[curr_rand_index] = gradient;
-            match l1_regularization{
-                Some(lambda) => weights = ((1.0 - (0.01 * lambda)) * weights) - ((0.01 / seen as f64) * gradient_sum.to_owned()),
-                None => weights = weights - ((0.01 / seen as f64) * gradient_sum.to_owned())
+            let grad = curr_y as f64 - predictions;
+            grad_sum = grad_sum - (grads[choice] * curr_x.to_owned()) + grad;
+            grads[choice] = grad;
+            match l1_regularization {
+                Some(lambda) => {
+                    weights = ((1.0 - (0.01 * lambda)) * weights)
+                        - ((0.01 / seen as f64) * grad_sum.to_owned())
+                }
+                None => weights = weights - ((0.01 / seen as f64) * grad_sum.to_owned()),
             };
             seen += 1;
-            curr_rand_index = rand_gen.gen_range(0..target.len());
+            choice = rand_gen.gen_range(0..target.len());
         }
         weights
+    }
+
+    pub fn multinomial_fit(
+        features: ArrayView2<f64>,
+        labels: ArrayView2<f64>,
+        epochs: usize,
+        l1_regularization: Option<f64>,
+    ) {
     }
 
     fn predict_external(&self, data: &ArrayView2<f64>) -> Array1<u32> {
         let weights_array = Array1::from_vec(self.weights.clone());
         let result = data.dot(&weights_array);
-        result.map(|x| {utils::linalg::sigmoid(*x).to_u32().unwrap()}).to_owned()
+        result
+            .map(|x| utils::linalg::sigmoid(*x).to_u32().unwrap())
+            .to_owned()
     }
 
     pub fn predict(&self) -> Array1<u32> {
@@ -462,7 +477,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sigmoid(){
+    fn test_sigmoid() {
         assert_eq!(utils::linalg::sigmoid(2.1), 0.8909031788043871);
     }
 }
