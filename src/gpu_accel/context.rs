@@ -1,17 +1,19 @@
+use super::compute::{ComputeContext, ComputeContextParts};
 use super::Error;
 
 use log::{debug, info, trace};
-#[cfg(not(feature = "async_impl"))]
+#[cfg(not(feature = "async_impls"))]
 use std::sync::Mutex;
-use std::{fmt::Debug, sync::Arc};
-#[cfg(feature = "async_impl")]
+use std::{fmt::Debug, ops::Deref, sync::Arc};
+#[cfg(feature = "async_impls")]
 use tokio::sync::Mutex;
 use vulkano::{
     command_buffer::allocator::{
         StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,
     },
     device::{
-        physical::{PhysicalDevice, PhysicalDeviceType}, Device, DeviceCreateInfo, DeviceOwned, Queue, QueueCreateInfo, QueueFlags,
+        physical::{PhysicalDevice, PhysicalDeviceType},
+        Device, DeviceCreateInfo, DeviceOwned, Queue, QueueCreateInfo, QueueFlags,
     },
     instance::{Instance, InstanceCreateInfo},
     memory::allocator::StandardMemoryAllocator,
@@ -32,6 +34,36 @@ pub struct GpuContext {
 }
 
 impl GpuContext {
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
+    pub fn queue_family_index(&self) -> u32 {
+        self.queue_family_index
+    }
+
+    pub fn queues(&self) -> &Box<[Arc<Queue>]> {
+        &self.queues
+    }
+
+    pub fn next_queue(&self) -> usize {
+        // Currently, we unwrap because that's what tokio does. In the future, we should add
+        // a "try" implementation.
+        #[cfg(not(feature = "async_impls"))]
+        let res = *self.next_queue.lock().unwrap();
+        #[cfg(feature = "async_impls")]
+        let res = *self.next_queue.blocking_lock();
+        res
+    }
+
+    pub fn memory_allocator(&self) -> &Arc<StandardMemoryAllocator> {
+        &self.memory_allocator
+    }
+
+    pub fn command_buffer_allocator(&self) -> &Arc<StandardCommandBufferAllocator> {
+        &self.command_buffer_allocator
+    }
+
     pub fn from_raw_parts(parts: GpuContextParts) -> Result<Self, Error> {
         fn e(
             device: Arc<Device>,
@@ -160,6 +192,11 @@ impl Debug for GpuContext {
     }
 }
 
+impl<GpuContextPtr: Deref<Target = GpuContext>> GpuContextCreateAssociatedObjects
+    for GpuContextPtr
+{
+}
+
 #[derive(Clone)]
 pub struct GpuContextParts {
     pub device: Arc<Device>,
@@ -252,6 +289,20 @@ pub fn default_custom_target(
         // TODO: Consider changing desired closure type to return Option<_> instead. I don't like this unwrap.
         .next()
         .unwrap()
+}
+
+pub trait GpuContextCreateAssociatedObjects
+where
+    Self: Deref<Target = GpuContext> + Sized,
+{
+    fn create_compute_context(self) -> ComputeContext<Self> {
+        ComputeContext::from_raw_parts_unchecked(ComputeContextParts {
+            gpu_context: self,
+            input_buffers: vec![],
+            output_buffers: vec![],
+            support_buffers: None,
+        })
+    }
 }
 
 fn select_device_and_queue_family(
