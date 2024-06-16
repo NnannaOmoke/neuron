@@ -1,3 +1,4 @@
+pub mod compute;
 pub mod context;
 
 use std::{fmt::Debug, sync::Arc};
