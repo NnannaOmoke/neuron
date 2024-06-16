@@ -13,13 +13,14 @@ use std::{cell::RefCell, collections::HashSet, default, ops::Rem, os::unix::thre
 use crate::{
     base_array::{base_dataset::BaseDataset, BaseMatrix},
     dtype::DType,
+    linear_models::{
+        non_regularizing_fit, ridge_regularizing_fit, LinearRegularizer, _coordinate_descent,
+    },
     utils::{
         linalg::{dot, one_hot_encode_1d, softmax_1d, solve_linear_systems},
         model_selection::{self, TrainTestSplitStrategy, TrainTestSplitStrategyData},
         scaler::{Scaler, ScalerState},
     },
-    linear_models::{LinearRegularizer,non_regularizing_fit, ridge_regularizing_fit, _coordinate_descent},
-    
     *,
 };
 
@@ -70,13 +71,12 @@ impl LinearRegressorBuilder {
         }
     }
 
-    pub fn predict(&self, data: ArrayView2<f64>) -> Array1<f64>{
+    pub fn predict(&self, data: ArrayView2<f64>) -> Array1<f64> {
         let weights = Array1::from_vec(self.weights.clone());
         let mut array = data.dot(&weights.view());
         array += self.bias;
         array
     }
-
 
     pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
         self.target_col = dataset._get_string_index(target);
@@ -141,13 +141,10 @@ impl LinearRegressorBuilder {
         let preds = self.predict(features);
         function(ground_truth, preds.view())
     }
-
 }
 
-
-
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
     use crate::{
         utils::{
@@ -177,6 +174,5 @@ mod tests{
         let mse = learner.evaluate(mean_squared_error);
         let rmse = learner.evaluate(root_mean_square_error);
         println!("mae: {}\nmse: {}\nrmse: {}", mae[0], mse[0], rmse[0]);
-        
     }
 }

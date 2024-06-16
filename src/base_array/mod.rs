@@ -10,6 +10,8 @@ use ndarray::{iter::LanesIterMut, ArrayView1, ArrayViewMut1, ShapeError};
 use std::io::Read;
 use thiserror::Error;
 
+pub(super) use base_dataset::BaseDataset;
+
 #[repr(C)]
 #[derive(Clone)]
 pub struct BaseMatrix {

@@ -1,4 +1,15 @@
+use crate::{
+    base_array::{base_dataset::BaseDataset, BaseMatrix},
+    dtype::DType,
+    utils::{
+        linalg::{argmax_1d_f64, dot, one_hot_encode_1d, softmax_1d, solve_linear_systems},
+        model_selection::{self, TrainTestSplitStrategy, TrainTestSplitStrategyData},
+        scaler::{Scaler, ScalerState},
+    },
+    *,
+};
 use core::num;
+use either::Either;
 use ndarray::{linalg, s, Array1, Array2, ArrayView1, ArrayViewMut1, ArrayViewMut2};
 use ndarray_linalg::{solve::Inverse, InnerProduct, Scalar};
 use num_traits::ToPrimitive;
@@ -10,20 +21,8 @@ use rand::{
 };
 use std::{cell::RefCell, collections::HashSet, default, ops::Rem, os::unix::thread};
 
-use crate::{
-    base_array::{base_dataset::BaseDataset, BaseMatrix},
-    dtype::DType,
-    utils::{
-        linalg::{dot, one_hot_encode_1d, softmax_1d, solve_linear_systems},
-        model_selection::{self, TrainTestSplitStrategy, TrainTestSplitStrategyData},
-        scaler::{Scaler, ScalerState},
-    },
-    *,
-};
-
-
 pub struct LogisticRegressorBuilder {
-    weights: Vec<f64>,
+    weights: Array2<f64>,
     bias: f64,
     scaler: ScalerState,
     strategy: TrainTestSplitStrategy,
@@ -37,7 +36,7 @@ pub struct LogisticRegressorBuilder {
 impl LogisticRegressorBuilder {
     pub fn new(include_bias: bool) -> Self {
         Self {
-            weights: vec![],
+            weights: Array2::default((0, 0)),
             bias: 0.0,
             scaler: ScalerState::None,
             strategy: TrainTestSplitStrategy::None,
@@ -53,8 +52,8 @@ impl LogisticRegressorBuilder {
         self.bias
     }
 
-    pub fn weights(&self) -> &[f64] {
-        &self.weights
+    pub fn weights(&self) -> ArrayView2<f64> {
+        self.weights.view()
     }
 
     pub fn train_test_split_strategy(self, strategy: TrainTestSplitStrategy) -> Self {
@@ -95,10 +94,10 @@ impl LogisticRegressorBuilder {
             }
             _ => {}
         };
-        self.tfit()
+        self.internal_fit()
     }
 
-    pub fn tfit(&mut self) {
+    fn internal_fit(&mut self) {
         if self.include_bias {
             self.data
                 .train_features
@@ -106,28 +105,26 @@ impl LogisticRegressorBuilder {
                 .unwrap();
         }
         let (features, target) = self.data.get_train();
+        if self.nclasses == 1 {
+            panic!("Not enough classes!");
+        }
         if self.nclasses == 2 {
-            let weights = Self::binary_fit(features, target, 50, self.regularizer);
+            let weights_1d = Self::binary_fit(features, target, 100, self.regularizer);
             if self.include_bias {
-                self.weights = weights.to_vec()[..weights.len() - 1].to_vec();
-                self.bias = *weights.last().unwrap();
+                let mut weights_2d = Array2::from_elem((1, weights_1d.len() - 1), 0f64);
+                weights_2d.row_mut(0).assign(&weights_1d.slice(s![..-1]));
+                self.weights = weights_2d;
+                self.bias = *weights_1d.last().unwrap();
             } else {
-                self.weights = weights.to_vec();
+                let mut weights_2d = Array2::from_elem((1, weights_1d.len()), 0f64);
+                weights_2d.row_mut(0).assign(&weights_1d.view());
+                self.weights = weights_2d;
             }
         } else if self.nclasses > 2 {
             let weights =
-                Self::multinomial_fit(features, target, 50, self.regularizer, self.nclasses);
-            if self.include_bias {
-                let len = weights.len();
-                let last = *weights.last().unwrap();
-                self.weights = weights.into_raw_vec()[..len - 1].to_vec();
-                self.bias = last;
-            } else {
-                self.weights = weights.into_raw_vec();
-            }
-        } else {
-            panic!("Only one target class!")
-        };
+                Self::multinomial_fit(features, target, 100, self.regularizer, self.nclasses);
+            self.weights = weights;
+        }
     }
     //uses the SAG algorithm
     //another alternative for super-fast convergence is the irls
@@ -198,33 +195,44 @@ impl LogisticRegressorBuilder {
         weights
     }
 
-    fn predict_external(&self, data: &ArrayView2<f64>) -> Array1<u32> {
-        let weights_array = Array1::from_vec(self.weights.clone());
+    fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
+        let weights_array = self.weights.row(0);
         let result = data.dot(&weights_array);
         result
-            .map(|x| utils::linalg::sigmoid(*x).to_u32().unwrap())
+            .map(|x| utils::linalg::sigmoid(*x + self.bias).to_u32().unwrap())
             .to_owned()
     }
 
-    fn predict_external_multinomial(&self, data: &ArrayView2<f64>) -> ArrayView1<u32> {
-        let weights_array =
-            Array2::from_shape_vec((self.nclasses, data.ncols()), self.weights().to_vec());
-        todo!()
+    fn predict_multinomial(&self, data: ArrayView2<f64>) -> Array1<u32> {
+        let result = data.dot(&self.weights.view());
+        result
+            .rows()
+            .into_iter()
+            .map(|x| argmax_1d_f64(x).to_u32().unwrap())
+            .collect::<Array1<u32>>()
     }
 
-    pub fn predict(&self) -> Array1<u32> {
-        match self.strategy {
-            TrainTestSplitStrategy::None => self.predict_external(&self.data.get_train().0),
-            TrainTestSplitStrategy::TrainTest(_) => self.predict_external(&self.data.get_test().0),
-            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
-                self.predict_external(&self.data.get_eval().0)
+    pub fn evaluate<F>(&self, function: F) -> Vec<f64>
+    //using a vec because user evaluation functions might return maybe one value or three
+    //all the functions we plan to build in will only return one value, however
+    where
+        F: Fn(ArrayView1<u32>, ArrayView1<u32>) -> Vec<f64>,
+    {
+        let (features, ground_truth) = match self.strategy {
+            TrainTestSplitStrategy::None => {
+                //get train data
+                self.data.get_train()
             }
-        }
+            TrainTestSplitStrategy::TrainTest(_) => self.data.get_test(),
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => self.data.get_eval(),
+        };
+        let preds = self.predict(features);
+        function(ground_truth, preds.view())
     }
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
     use crate::{
         utils::{
@@ -236,7 +244,7 @@ mod tests{
 
     #[test]
     fn test_convergence_classification() {
-        let dataset = base_array::base_dataset::BaseDataset::from_csv(
+        let dataset = base_array::BaseDataset::from_csv(
             Path::new("src/base_array/test_data/diabetes.csv"),
             true,
             true,
@@ -245,11 +253,9 @@ mod tests{
         .unwrap();
         let mut classifier = LogisticRegressorBuilder::new(false)
             .scaler(ScalerState::MinMax)
-            .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7))
-            .regularizer(0.01);
+            .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7));
         classifier.fit(&dataset, "Outcome");
-        let predictions = classifier.predict();
-        let ground_truth = classifier.data.get_test().1;
-        dbg!(accuracy(ground_truth, predictions.view()));
+        let accuracy = classifier.evaluate(accuracy);
+        println!("Accuracy: {}", accuracy[0])
     }
 }

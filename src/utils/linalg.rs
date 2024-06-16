@@ -88,6 +88,15 @@ where
     complete
 }
 
+pub fn argmax_1d_f64(vector: ArrayView1<f64>) -> usize {
+    let temp = vector.map(|x| NotNan::<f64>::new(*x).unwrap());
+    let max = temp.iter().max().unwrap();
+    vector
+        .iter()
+        .position(|x| NotNan::<f64>::new(*x).unwrap() == *max)
+        .unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use ndarray::array;

@@ -2,7 +2,6 @@ use core::num;
 use ndarray::{linalg, s, Array1, Array2, ArrayView1, ArrayViewMut1, ArrayViewMut2};
 use ndarray_linalg::{solve::Inverse, InnerProduct, Scalar};
 
-
 use crate::{
     base_array::{base_dataset::BaseDataset, BaseMatrix},
     dtype::DType,
@@ -28,7 +27,6 @@ pub enum LinearRegularizer {
     ElasticNet(f64, f64, usize),
 }
 
-
 pub fn _coordinate_descent(
     features: ArrayView2<f64>,
     target: ArrayView1<f64>,
@@ -40,13 +38,10 @@ pub fn _coordinate_descent(
     let mut weights = Array1::ones(ncols);
     for _ in 0..iters {
         for (index, col) in features.columns().into_iter().enumerate() {
-            let step =
-                _compute_step_col(features.view(), target, weights.view(), index, col);
+            let step = _compute_step_col(features.view(), target, weights.view(), index, col);
             let col_norm_factor = _compute_norm_term(col);
             weights[index] = match l2_regularizer {
-                Some(var) => {
-                    elastic_net_soft_threshold(step, l1_regularizer, var, col_norm_factor)
-                }
+                Some(var) => elastic_net_soft_threshold(step, l1_regularizer, var, col_norm_factor),
                 None => lasso_soft_threshold(step, l1_regularizer, col_norm_factor),
             }
         }
@@ -120,4 +115,3 @@ pub fn ridge_regularizing_fit(
     let right = feature_t.dot(&target);
     left_inv.dot(&right)
 }
-

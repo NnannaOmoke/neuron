@@ -42,6 +42,4 @@ pub(crate) use std::{
 };
 pub(crate) use thiserror::Error;
 
-fn test_something(){
-
-}
+fn test_something() {}
