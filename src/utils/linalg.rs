@@ -79,6 +79,15 @@ pub fn softmax_1d(input_vector: ArrayView1<f64>) -> Array1<f64> {
     exponented / summed
 }
 
+pub fn one_hot_encode_1d<T>(scalar: T, size: usize) -> Array1<u32>
+where
+    T: ToPrimitive,
+{
+    let mut complete = Array1::zeros(size);
+    complete[scalar.to_usize().unwrap()] = 1;
+    complete
+}
+
 #[cfg(test)]
 mod tests {
     use ndarray::array;
