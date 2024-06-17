@@ -2,7 +2,7 @@ use crate::{
     base_array::{base_dataset::BaseDataset, BaseMatrix},
     dtype::DType,
     utils::{
-        linalg::{argmax_1d_f64, dot, one_hot_encode_1d, softmax_1d, solve_linear_systems},
+        math::{argmax_1d_f64, dot, one_hot_encode_1d, softmax_1d, solve_linear_systems},
         model_selection::{self, TrainTestSplitStrategy, TrainTestSplitStrategyData},
         scaler::{Scaler, ScalerState},
     },
@@ -144,7 +144,7 @@ impl LogisticRegressorBuilder {
         for _ in 0..epochs {
             let curr_x = features.row(choice);
             let curr_y = target[choice];
-            let predictions = utils::linalg::sigmoid(curr_x.dot(&weights));
+            let predictions = utils::math::sigmoid(curr_x.dot(&weights));
             let grad = curr_y as f64 - predictions;
             grad_sum = grad_sum - (grads[choice] * curr_x.to_owned()) + grad;
             grads[choice] = grad;
@@ -199,7 +199,7 @@ impl LogisticRegressorBuilder {
         let weights_array = self.weights.row(0);
         let result = data.dot(&weights_array);
         result
-            .map(|x| utils::linalg::sigmoid(*x + self.bias).to_u32().unwrap())
+            .map(|x| utils::math::sigmoid(*x + self.bias).to_u32().unwrap())
             .to_owned()
     }
 

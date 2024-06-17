@@ -8,6 +8,7 @@ pub mod dtype;
 #[cfg(feature = "gpu_accel")]
 pub mod gpu_accel;
 pub mod linear_models;
+pub mod svm;
 pub mod utils;
 
 //All imports are defined here and made (pub)crate

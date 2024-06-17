@@ -6,7 +6,7 @@ use crate::{
     base_array::{base_dataset::BaseDataset, BaseMatrix},
     dtype::DType,
     utils::{
-        linalg::{dot, one_hot_encode_1d, softmax_1d, solve_linear_systems},
+        math::{dot, one_hot_encode_1d, softmax_1d, solve_linear_systems},
         model_selection::{self, TrainTestSplitStrategy, TrainTestSplitStrategyData},
         scaler::{Scaler, ScalerState},
     },

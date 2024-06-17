@@ -17,7 +17,7 @@ use crate::{
         non_regularizing_fit, ridge_regularizing_fit, LinearRegularizer, _coordinate_descent,
     },
     utils::{
-        linalg::{dot, one_hot_encode_1d, softmax_1d, solve_linear_systems},
+        math::{dot, one_hot_encode_1d, softmax_1d, solve_linear_systems},
         model_selection::{self, TrainTestSplitStrategy, TrainTestSplitStrategyData},
         scaler::{Scaler, ScalerState},
     },
