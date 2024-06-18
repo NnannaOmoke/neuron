@@ -3,6 +3,7 @@ use ndarray::Array1;
 use super::*;
 use crate::*;
 
+
 #[derive(Clone, Hash)]
 pub enum FillNAStrategy {
     Mean,
@@ -85,20 +86,20 @@ impl BaseDataset {
         self.data.data.rows_mut()
     }
     //get a read-only view of a column
-    pub fn get_col(&self, cindex: usize) -> ArrayView1<'_, DType> {
+    pub fn get_col(&self, cindex: usize) -> ArrayView1<DType> {
         self.data.get_col(cindex)
     }
     //get a mutable view of a column
-    pub fn get_col_mut(&mut self, cindex: usize) -> ArrayViewMut1<'_, DType> {
+    pub fn get_col_mut(&mut self, cindex: usize) -> ArrayViewMut1<DType> {
         self.data.get_mut_col(cindex)
         // Recalculate cached values
     }
     //get a read-only view of a row
-    pub fn get_row(&self, cindex: usize) -> ArrayView1<'_, DType> {
+    pub fn get_row(&self, cindex: usize) -> ArrayView1<DType> {
         self.data.get_row(cindex)
     }
     //get a mutable view of a column
-    pub fn get_row_mut(&mut self, cindex: usize) -> ArrayViewMut1<'_, DType> {
+    pub fn get_row_mut(&mut self, cindex: usize) -> ArrayViewMut1<DType> {
         self.data.get_mut_row(cindex)
         // Recalculate cached values
     }
@@ -212,16 +213,16 @@ impl BaseDataset {
         self.data.push_col(slice);
     }
     //iterator over column name, data pairs
-    pub fn items<'s>(&'s mut self) -> Zip<Iter<String>, base_array::ColumnIter<'s>> {
+    pub fn items(&mut self) -> Zip<Iter<String>, base_array::ColumnIter> {
         zip(self.column_names.iter(), self.data.cols())
     }
     //iterator over row-index, data pairs
     //note that indexes are movable, for now
-    pub fn iterrows(&self) -> Zip<Range<usize>, RowIter<'_>> {
+    pub fn iterrows(&self) -> Zip<Range<usize>, RowIter> {
         zip(0..self.data.len(), self.data.rows())
     }
     //iterator over rows
-    pub fn itertuples(&self) -> RowIter<'_> {
+    pub fn itertuples(&self) -> RowIter {
         self.data.rows()
     }
     //applies a function to a column

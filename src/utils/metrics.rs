@@ -26,7 +26,6 @@ pub fn root_mean_square_error(target: ArrayView1<f64>, predicted: ArrayView1<f64
 }
 
 pub fn accuracy(target: ArrayView1<u32>, predicted: ArrayView1<u32>) -> Vec<f64> {
-    //probably need to create a heatmap for combination of variables
     assert!(target.len() == predicted.len());
     let correct = zip(target, predicted).filter(|(x, y)| x == y).count();
     vec![correct as f64 / target.len() as f64]

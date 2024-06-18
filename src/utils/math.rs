@@ -12,7 +12,7 @@ pub fn forward_elimination(array: &mut ArrayViewMut2<f64>) {
                 eprintln!("Potential singular matrix encountered!");
                 return;
             }
-            for k in i + 1..=len {
+            for k in i + 1 ..=len {
                 array[(j, k)] -= pivot * array[(i, k)];
             }
         }
@@ -50,7 +50,6 @@ fn dot_d(left: ArrayView1<dtype::DType>, right: ArrayView1<dtype::DType>) -> f64
         res += x * y;
     });
     res.to_f64().unwrap()
-    //left.map(|x| x.to_f64().unwrap()).dot(&right.map(|x| x.to_f64().unwrap()))
 }
 
 pub fn dot(left: ArrayView1<f64>, right: ArrayView1<f64>) -> f64 {
