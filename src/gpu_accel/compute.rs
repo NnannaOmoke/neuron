@@ -1,72 +1,64 @@
-// /// TODO: Add docs.
-// use super::{context::GpuContext, Error};
+use super::context::GpuContext;
+use std::{ops::Deref, sync::Arc};
 
-// use std::{ops::Deref, sync::Arc};
-// use vulkano::{buffer::Buffer, device::DeviceOwned};
+pub struct ComputeContext<GpuContextPtr: Deref<Target = GpuContext>> {
+    gpu_context: GpuContextPtr,
+}
 
-// pub struct ComputeContext<GpuContextPtr: Deref<Target = GpuContext>> {
-//     gpu_context: GpuContextPtr,
-//     input_buffers: Vec<Arc<Buffer>>,
-//     output_buffers: Vec<Arc<Buffer>>,
-//     support_buffers: Option<Vec<Arc<Buffer>>>,
-// }
+pub struct OperationPipeline<GpuContextPtr, ComputeContextPtr>
+where
+    GpuContextPtr: Deref<Target = GpuContext>,
+    ComputeContextPtr: Deref<Target = ComputeContext<GpuContextPtr>>,
+{
+    compute_context: ComputeContextPtr,
+    operations: Vec<Operation>,
+}
 
-// impl<GpuContextPtr: Deref<Target = GpuContext>> ComputeContext<GpuContextPtr> {
-//     pub fn from_raw_parts(parts: ComputeContextParts<GpuContextPtr>) -> Result<Self, Error> {
-//         for buffer in parts.input_buffers.iter() {
-//             if buffer.device() != parts.gpu_context.device() {
-//                 return Err(Error::WrongDevice {
-//                     expected_device: parts.gpu_context.device().clone(),
-//                     got_device: buffer.device().clone(),
-//                     // TODO: Make the offending_argument thing take a string so we can do support_buffers[i]
-//                     offending_argument: Some("output_buffers"),
-//                 });
-//             }
-//         }
-//         for buffer in parts.output_buffers.iter() {
-//             if buffer.device() != parts.gpu_context.device() {
-//                 return Err(Error::WrongDevice {
-//                     expected_device: parts.gpu_context.device().clone(),
-//                     got_device: buffer.device().clone(),
-//                     // TODO: Make the offending_argument thing take a string so we can do support_buffers[i]
-//                     offending_argument: Some("output_buffers"),
-//                 });
-//             }
-//         }
-//         for buffer in parts.support_buffers.iter().flatten() {
-//             if buffer.device() != parts.gpu_context.device() {
-//                 return Err(Error::WrongDevice {
-//                     expected_device: parts.gpu_context.device().clone(),
-//                     got_device: buffer.device().clone(),
-//                     // TODO: Make the offending_argument thing take a string so we can do support_buffers[i]
-//                     offending_argument: Some("support_buffers"),
-//                 });
-//             }
-//         }
+impl<GpuContextPtr, ComputeContextPtr> OperationPipeline<GpuContextPtr, ComputeContextPtr>
+where
+    GpuContextPtr: Deref<Target = GpuContext>,
+    ComputeContextPtr: Deref<Target = ComputeContext<GpuContextPtr>>,
+{
+    pub fn create_command_buffer(&self, label: Option<&str>) -> wgpu::CommandBuffer {
+        self.create_command_encoder(label).finish()
+    }
 
-//         Ok(Self::from_raw_parts_unchecked(parts))
-//     }
+    /// Creates an unfinished [`wgpu::CommandEncoder`] to which additional operations
+    /// or commands can be added.
+    ///
+    /// You may be looking for [`OperationPipeline::create_command_buffer`].
+    pub fn create_command_encoder(&self, label: Option<&str>) -> wgpu::CommandEncoder {
+        let mut command_encoder = self
+            .compute_context
+            .gpu_context
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label });
+        for operation in &self.operations {
+            operation.push_to_command_encoder(&mut command_encoder);
+        }
 
-//     pub fn from_raw_parts_unchecked(
-//         ComputeContextParts {
-//             gpu_context,
-//             input_buffers,
-//             output_buffers,
-//             support_buffers,
-//         }: ComputeContextParts<GpuContextPtr>,
-//     ) -> Self {
-//         ComputeContext {
-//             gpu_context,
-//             input_buffers,
-//             output_buffers,
-//             support_buffers,
-//         }
-//     }
-// }
+        command_encoder
+    }
 
-// pub struct ComputeContextParts<GpuContextPtr: Deref<Target = GpuContext>> {
-//     pub gpu_context: GpuContextPtr,
-//     pub input_buffers: Vec<Arc<Buffer>>,
-//     pub output_buffers: Vec<Arc<Buffer>>,
-//     pub support_buffers: Option<Vec<Arc<Buffer>>>,
-// }
+    pub fn push_operation(&mut self, operation: Operation) {
+        self.operations.push(operation);
+    }
+}
+
+pub enum Operation {
+    DotInPlace {
+        a_and_out: Arc<wgpu::Buffer>,
+        b: Arc<wgpu::Buffer>,
+    },
+    DotExtern {
+        a: Arc<wgpu::Buffer>,
+        b: Arc<wgpu::Buffer>,
+        output: Arc<wgpu::Buffer>,
+    },
+}
+
+impl Operation {
+    pub fn push_to_command_encoder(&self, command_encoder: &mut wgpu::CommandEncoder) {
+        todo!();
+    }
+}
