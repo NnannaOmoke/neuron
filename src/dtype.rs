@@ -430,7 +430,6 @@ impl MulAssign<DType> for DType {
             }
             // else, no change
         } else {
-            
             *self = (&*self * &rhs).clone()
         }
     }

@@ -12,7 +12,7 @@ pub fn forward_elimination(array: &mut ArrayViewMut2<f64>) {
                 eprintln!("Potential singular matrix encountered!");
                 return;
             }
-            for k in i + 1 ..=len {
+            for k in i + 1..=len {
                 array[(j, k)] -= pivot * array[(i, k)];
             }
         }

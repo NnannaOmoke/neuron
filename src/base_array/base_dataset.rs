@@ -3,7 +3,6 @@ use ndarray::Array1;
 use super::*;
 use crate::*;
 
-
 #[derive(Clone, Hash)]
 pub enum FillNAStrategy {
     Mean,
@@ -543,13 +542,27 @@ impl BaseDataset {
         }
     }
 
+    pub fn sort_by(&mut self, colname: &str) {
+        let index = self._get_string_index(colname);
+        let mut indices = Vec::from_iter(0..self.len());
+        indices.sort_by_cached_key(|x| self.get(*x, index));
+        let mut data = Array2::from_elem(self.data.shape(), DType::zero());
+        for row_index in 0..self.data.len() {
+            data.row_mut(row_index)
+                .assign(&self.get_row(indices[row_index]));
+        }
+        self.data = BaseMatrix { data };
+    }
+
     pub(crate) fn get(&self, rowindex: usize, colindex: usize) -> &DType {
         self.data.get(rowindex, colindex)
     }
+
     pub(crate) fn _raw_col_drop(&mut self, col_index: usize) {
         self.column_names.remove(col_index);
         self.data.data.remove_index(Axis(1), col_index)
     }
+
     pub(crate) fn _get_string_index(&self, colname: &str) -> usize {
         self.column_names
             .iter()
