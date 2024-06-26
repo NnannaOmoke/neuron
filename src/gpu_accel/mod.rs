@@ -1,5 +1,6 @@
 pub mod compute;
 pub mod context;
+pub mod shaders;
 
 use std::{fmt::Debug, sync::Arc};
 // use thiserror::Error;

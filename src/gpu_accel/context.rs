@@ -2,6 +2,7 @@ pub use wgpu::InstanceDescriptor;
 
 use log::{debug, info, trace};
 use std::{fmt::Debug, path::Path};
+use super::shaders::Shaders;
 use thiserror::Error;
 
 pub struct DeviceOptions<'a, F: DeviceSelectorFn> {
@@ -25,7 +26,7 @@ impl Default for DeviceOptions<'static, DeviceSelectorFDummy> {
 pub struct GpuContext {
     device: wgpu::Device,
     queue: wgpu::Queue,
-    // TODO: Add shader stuff.
+    shaders: Shaders,
 }
 
 impl GpuContext {
@@ -35,6 +36,10 @@ impl GpuContext {
 
     pub fn queue(&self) -> &wgpu::Queue {
         &self.queue
+    }
+
+    pub fn shaders(&self) -> &Shaders {
+        &self.shaders
     }
 
     pub async fn new<'a, F: DeviceSelectorFn>(
@@ -83,7 +88,7 @@ impl GpuContext {
             )
             .await?;
 
-        Ok(Self { device, queue })
+        Ok(Self { device, queue, shaders: Shaders::new() })
     }
 }
 
