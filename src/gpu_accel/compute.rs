@@ -61,13 +61,13 @@ pub enum Operation {
     DotInPlace {
         a_and_out: Arc<wgpu::Buffer>,
         b: Arc<wgpu::Buffer>,
-        wgpu_label: String,
+        wgpu_label: Option<String>,
     },
     DotExtern {
         a: Arc<wgpu::Buffer>,
         b: Arc<wgpu::Buffer>,
         output: Arc<wgpu::Buffer>,
-        wgpu_label: String,
+        wgpu_label: Option<String>,
     },
 }
 
@@ -95,7 +95,7 @@ impl Operation {
                 wgpu_label,
             } => {
                 let mut ce = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                    label: Some(&wgpu_label),
+                    label: wgpu_label.as_ref().map(|s| s.as_str()),
                     timestamp_writes: None,
                 });
                 todo!();
@@ -107,7 +107,7 @@ impl Operation {
                 wgpu_label,
             } => {
                 let mut ce = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                    label: Some(&wgpu_label),
+                    label: wgpu_label.as_ref().map(|s| s.as_str()),
                     timestamp_writes: None,
                 });
                 todo!();
