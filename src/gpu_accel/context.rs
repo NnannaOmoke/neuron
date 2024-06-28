@@ -1,8 +1,8 @@
 pub use wgpu::InstanceDescriptor;
 
+use super::shaders::Shaders;
 use log::{debug, info, trace};
 use std::{fmt::Debug, path::Path};
-use super::shaders::Shaders;
 use thiserror::Error;
 
 pub struct DeviceOptions<'a, F: DeviceSelectorFn> {
@@ -88,7 +88,11 @@ impl GpuContext {
             )
             .await?;
 
-        Ok(Self { device, queue, shaders: Shaders::new() })
+        Ok(Self {
+            device,
+            queue,
+            shaders: Shaders::new(),
+        })
     }
 }
 

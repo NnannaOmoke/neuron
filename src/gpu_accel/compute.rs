@@ -1,5 +1,8 @@
 use super::context::GpuContext;
-use std::{ops::Deref, sync::{Arc, OnceLock}};
+use std::{
+    ops::Deref,
+    sync::{Arc, OnceLock},
+};
 
 pub struct ComputeContext<GpuContextPtr: Deref<Target = GpuContext>> {
     gpu_context: GpuContextPtr,

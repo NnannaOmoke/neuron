@@ -19,10 +19,10 @@ impl Shaders {
         self.dot_in_place.get_or_init(|| init_dot_in_place(device))
     }
 
-    pub fn get_dot_extern(&self,device: &wgpu::Device) -> &wgpu::ShaderModule {
+    pub fn get_dot_extern(&self, device: &wgpu::Device) -> &wgpu::ShaderModule {
         self.dot_in_place.get_or_init(|| init_dot_extern(device))
     }
-    
+
     pub fn new() -> Self {
         Self::default()
     }
