@@ -1,3 +1,4 @@
+use naga::proc::{IndexableLength, IndexableLengthError};
 use ndarray::{Array1, Array2, ArrayView1, ArrayViewMut2};
 
 use super::*;
@@ -88,12 +89,23 @@ where
 }
 
 pub fn argmax_1d_f64(vector: ArrayView1<f64>) -> usize {
-    let temp = vector.map(|x| NotNan::<f64>::new(*x).unwrap());
-    let max = temp.iter().max().unwrap();
-    vector
-        .iter()
-        .position(|x| NotNan::<f64>::new(*x).unwrap() == *max)
-        .unwrap()
+    let mut max = 0;
+    for (index, elem) in vector.iter().enumerate() {
+        if f64::max(*elem, vector[max]) == *elem {
+            max = index;
+        }
+    }
+    max
+}
+
+pub fn argmin_1d_f64(vector: ArrayView1<f64>) -> usize {
+    let mut min = 0;
+    for (index, elem) in vector.iter().enumerate() {
+        if f64::min(*elem, vector[min]) == *elem {
+            min = index;
+        }
+    }
+    min
 }
 
 #[cfg(test)]

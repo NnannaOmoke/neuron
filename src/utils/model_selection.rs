@@ -1,4 +1,4 @@
-use std::{arch::x86_64, collections::HashMap};
+use std::collections::HashMap;
 
 use crate::{
     base_array::base_dataset::BaseDataset,
@@ -223,21 +223,25 @@ pub fn train_test_split<F: Default + Clone, L: Clone + Default>(
     let train_split = (ratio.0 * (indices.len() as f32)) as usize;
     let test_split = features.nrows() - train_split;
 
-    let mut feature_train = Array2::from_elem((0, features.ncols()), F::default());
+    let mut feature_train = Array2::from_elem((train_split, features.ncols()), F::default());
     let mut label_train = Array1::from_elem(features.nrows() - test_split, L::default());
-    let mut feature_test = Array2::from_elem((0, features.ncols()), F::default());
+    let mut feature_test = Array2::from_elem((test_split, features.ncols()), F::default());
     let mut label_test = Array1::from_elem(test_split, L::default());
     let mut count_t = 0;
     let mut count_test = 0;
 
     for elem in &indices[..train_split] {
-        feature_train.push_row(features.row(*elem)).unwrap();
+        feature_train
+            .row_mut(count_t)
+            .assign(&features.row(*elem).view());
         label_train[count_t] = labels[*elem].clone();
         count_t += 1;
     }
 
     for elem in &indices[train_split..] {
-        feature_test.push_row(features.row(*elem)).unwrap();
+        feature_test
+            .row_mut(count_test)
+            .assign(&features.row(*elem).view());
         label_test[count_test] = labels[*elem].clone();
         count_test += 1;
     }

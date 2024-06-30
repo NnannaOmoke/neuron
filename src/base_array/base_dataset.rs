@@ -573,21 +573,21 @@ impl BaseDataset {
         self.data.data.clone()
     }
     pub(crate) fn into_f64_array_without_target(&self, target: usize) -> Array2<f64> {
-        let mut data = Array2::from_elem((self.data.shape().0, 0usize), 0f64);
+        let mut data = Array2::from_elem((self.data.shape().0, self.shape().1 - 1), 0f64);
         for (index, col) in self.cols().enumerate() {
             if index == target {
                 continue;
             }
-            data.push_column(col.map(|x| x.to_f64().unwrap()).view())
-                .unwrap();
+            data.column_mut(index)
+                .assign(&col.map(|x| x.to_f64().unwrap()).view());
         }
         data
     }
     pub(crate) fn into_f64_array(&self) -> Array2<f64> {
-        let mut data = Array2::from_elem((0usize, self.data.shape().1), 0f64);
-        self.rows().for_each(|x| {
-            data.push_row(x.map(|x| x.to_f64().unwrap()).view())
-                .expect("Possible shape error on appending array");
+        let mut data = Array2::from_elem((self.shape().0, self.data.shape().1), 0f64);
+        self.rows().enumerate().for_each(|(index, row_view)| {
+            data.row_mut(index)
+                .assign(&row_view.map(|x| x.to_f64().unwrap()).view());
         });
         data
     }
