@@ -1,16 +1,19 @@
-use std::collections::btree_map::Values;
-
 use crate::{
     base_array::BaseDataset,
-    svm::{linear_kernel_2d, polynomial_kernel_2d, rbf_kernel_2d, sigmoid_kernel_2d, SVMKernel},
+    svm::{
+        linear_kernel_1d, linear_kernel_2d, polynomial_kernel_1d, polynomial_kernel_2d,
+        rbf_kernel_1d, rbf_kernel_2d, sigmoid_kernel_1d, sigmoid_kernel_2d, SVMKernel,
+    },
     utils::model_selection::{TrainTestSplitStrategy, TrainTestSplitStrategyData},
-    utils::scaler::{Scaler, ScalerState},
+    utils::{
+        math::{argmax_1d_f64, argmin_1d_f64},
+        scaler::{Scaler, ScalerState},
+    },
     Array2, ArrayView2,
 };
 
 use ndarray::{array, Array1, ArrayView1};
 use num_traits::ToPrimitive;
-use prettytable::format::consts::FORMAT_NO_LINESEP_WITH_TITLE;
 
 #[derive(Clone)]
 pub struct SVCBuilder {
@@ -108,7 +111,6 @@ impl SVCBuilder {
 
     pub fn internal_fit(&mut self) {
         let (features, labels) = self.data.get_train();
-        let (features, labels) = (features.to_owned(), labels.to_owned());
         let kernel_ref = &self.kernel;
         let information = match self.nclasses {
             1 => panic!("Not enough classes"),
@@ -118,9 +120,9 @@ impl SVCBuilder {
     }
 
     pub fn binomial_fit(
-        &mut self,
-        features: Array2<f64>,
-        target: Array1<u32>,
+        &self,
+        features: ArrayView2<f64>,
+        target: ArrayView1<u32>,
         epochs: usize,
         kernel: &SVMKernel,
     ) {
@@ -141,6 +143,44 @@ impl SVCBuilder {
             if i2 == -1 {
                 break;
             }
+            let i1 = self.heuristic_1(error_cache.view(), i2);
+            if i1 == i2 as usize {
+                continue;
+            }
+            //get samples, labels and alpha values
+            let (feature_one, label_one, alpha_one) = (
+                self.support_vectors.row(i1),
+                self.support_labels[i1],
+                self.alphas[i1],
+            );
+            let (feature_two, label_two, alpha_two) = (
+                self.support_vectors.row(i2 as usize),
+                self.support_labels[i2 as usize],
+                self.alphas[i2 as usize],
+            );
+            let (lower, upper) =
+                self.compute_boundaries(alpha_one, alpha_two, label_one, label_two);
+            if lower == upper {
+                continue;
+            }
+            let eta = self.compute_eta(feature_one, feature_two);
+            if eta == 0f64 {
+                continue;
+            }
+            let holder_one = Array2::from_shape_fn((1, nrows), |(_, y)| feature_one[y]);
+            let holder_two = Array2::from_shape_fn((1, nrows), |(_, y)| feature_two[y]);
+            let score_one = self.predict(holder_one.view());
+            let score_two = self.predict(holder_two.view());
+            drop(holder_one);
+            drop(holder_two);
+            //predict should not return u32s!
+            let e1 = score_one[0] as f64 - label_one as f64;
+            let e2 = score_two[0] as f64 - label_two as f64;
+            let mut alpha_two_new = alpha_two + label_two as f64 * (e1 - e2) / eta;
+            alpha_two_new = alpha_two_new.min(upper);
+            alpha_two_new = alpha_two_new.max(lower);
+            let alpha_one_new =
+                alpha_one + label_one as f64 * label_two as f64 * (alpha_two - alpha_two_new);
         }
     }
 
@@ -173,12 +213,33 @@ impl SVCBuilder {
         todo!()
     }
 
-    pub fn heuristic_1(&self, mut error_cache: &mut Array1<f64>, i2: isize) -> isize {
+    pub fn heuristic_1(&self, error_cache: ArrayView1<f64>, i2: isize) -> usize {
         let e2 = error_cache[i2 as usize];
-        todo!()
+        let non_bounded_indices = self
+            .alphas
+            .iter()
+            .enumerate()
+            .filter(|(_, value)| (0f64 < **value) && (**value < self.C))
+            .map(|(index, _)| index)
+            .collect::<Array1<usize>>();
+        let i1: usize;
+        if non_bounded_indices.len() > 0 {
+            let current = non_bounded_indices
+                .iter()
+                .map(|x| error_cache[*x])
+                .collect::<Array1<f64>>();
+            if e2 >= 0f64 {
+                i1 = argmax_1d_f64(current.view());
+            } else {
+                i1 = argmin_1d_f64(current.view());
+            }
+        } else {
+            i1 = argmax_1d_f64((error_cache.to_owned() - e2).map(|x| x.abs()).view());
+        }
+        i1
     }
 
-    pub fn heuristic_2(&mut self, mut non_kkt_array: &mut Array1<usize>) -> isize {
+    pub fn heuristic_2(&self, non_kkt_array: &mut Array1<usize>) -> isize {
         let mut init_i2 = -1isize;
         for elem in non_kkt_array.clone() {
             non_kkt_array.remove_index(ndarray::Axis(0), elem);
@@ -200,7 +261,7 @@ impl SVCBuilder {
                 //TODO: shuffle
                 //still stuff to do
                 init_i2 = non_kkt_array[0] as isize;
-                *non_kkt_array = non_kkt_array.slice(ndarray::s![1..-1]).to_owned();
+                *non_kkt_array = not_kkt_array.slice(ndarray::s![1..-1]).to_owned();
             }
         }
         init_i2
@@ -239,4 +300,80 @@ impl SVCBuilder {
         let res = Array1::from_shape_fn(alphas.len(), |x| !(condition_one[x] | condition_two[x]));
         res
     }
+
+    pub fn compute_boundaries(
+        &self,
+        alpha_one: f64,
+        alpha_two: f64,
+        label_one: u32,
+        label_two: u32,
+    ) -> (f64, f64) {
+        let lower_bound: f64;
+        let upper_bound: f64;
+
+        if label_one == label_two {
+            lower_bound = 0f64.max(alpha_one + alpha_two - self.C);
+            upper_bound = self.C.min(alpha_one + alpha_two);
+        } else {
+            lower_bound = 0f64.max(alpha_one - alpha_two);
+            upper_bound = self.C.min(alpha_two - alpha_one);
+        }
+        (lower_bound, upper_bound)
+    }
+
+    pub fn compute_eta(&self, row_one: ArrayView1<f64>, row_two: ArrayView1<f64>) -> f64 {
+        match self.kernel {
+            SVMKernel::RBF(gamma) => {
+                let one = rbf_kernel_1d(row_one, row_one, gamma);
+                let two = rbf_kernel_1d(row_two, row_two, gamma);
+                let three = rbf_kernel_1d(row_one, row_two, gamma);
+                one + two - (three.powi(2))
+            }
+            SVMKernel::Linear => {
+                let one = linear_kernel_1d(row_one, row_one);
+                let two = linear_kernel_1d(row_two, row_two);
+                let three = linear_kernel_1d(row_one, row_two);
+                one + two - (three.powi(2))
+            }
+            SVMKernel::Polynomial(degree, coef_) => {
+                let one = polynomial_kernel_1d(row_one, row_one, degree, coef_);
+                let two = polynomial_kernel_1d(row_two, row_two, degree, coef_);
+                let three = polynomial_kernel_1d(row_one, row_two, degree, coef_);
+                one + two - (three.powi(2))
+            }
+            SVMKernel::Sigmoid(coef_, alpha) => {
+                let one = sigmoid_kernel_1d(row_one, row_one, coef_, alpha);
+                let two = sigmoid_kernel_1d(row_two, row_two, coef_, alpha);
+                let three = sigmoid_kernel_1d(row_one, row_two, coef_, alpha);
+                one + two - (three.powi(2))
+            }
+        }
+    }
+
+    pub fn kernel_op_1d(&self, row_one: ArrayView1<f64>, row_two: ArrayView1<f64>) -> f64 {
+        match self.kernel {
+            SVMKernel::RBF(gamma) => {
+                let three = rbf_kernel_1d(row_one, row_two, gamma);
+                three
+            }
+            SVMKernel::Linear => {
+                let three = linear_kernel_1d(row_one, row_two);
+                three
+            }
+            SVMKernel::Polynomial(degree, coef_) => {
+                let three = polynomial_kernel_1d(row_one, row_two, degree, coef_);
+                three
+            }
+            SVMKernel::Sigmoid(coef_, alpha) => {
+                let three = sigmoid_kernel_1d(row_one, row_two, coef_, alpha);
+                three
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_something() {}
 }
