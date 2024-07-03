@@ -1,8 +1,9 @@
 use crate::{
     base_array::BaseDataset,
     svm::{
-        linear_kernel_1d, linear_kernel_2d, polynomial_kernel_1d, polynomial_kernel_2d,
-        rbf_kernel_1d, rbf_kernel_2d, sigmoid_kernel_1d, sigmoid_kernel_2d, SVMKernel,
+        linear_kernel_1d, linear_kernel_2d, linear_kernel_mixed, polynomial_kernel_1d,
+        polynomial_kernel_2d, polynomial_kernel_mixed, rbf_kernel_1d, rbf_kernel_2d,
+        rbf_kernel_mixed, sigmoid_kernel_1d, sigmoid_kernel_2d, sigmoid_kernel_mixed, SVMKernel,
     },
     utils::model_selection::{TrainTestSplitStrategy, TrainTestSplitStrategyData},
     utils::{
@@ -169,8 +170,8 @@ impl SVCBuilder {
             }
             let holder_one = Array2::from_shape_fn((1, nrows), |(_, y)| feature_one[y]);
             let holder_two = Array2::from_shape_fn((1, nrows), |(_, y)| feature_two[y]);
-            let score_one = self.predict(holder_one.view());
-            let score_two = self.predict(holder_two.view());
+            let score_one = self.predict_raw(holder_one.view());
+            let score_two = self.predict_raw(holder_two.view());
             drop(holder_one);
             drop(holder_two);
             //predict should not return u32s!
@@ -197,9 +198,7 @@ impl SVCBuilder {
     pub fn predict(&self, input: ArrayView2<f64>) -> Array1<u32> {
         let weights = self.support_vectors.clone() * self.alphas.view();
         let values = match self.kernel {
-            SVMKernel::RBF(gamma) => {
-                rbf_kernel_2d(self.support_vectors.to_owned(), input.to_owned(), gamma)
-            }
+            SVMKernel::RBF(gamma) => rbf_kernel_2d(self.support_vectors.view(), input, gamma),
             SVMKernel::Polynomial(degree, coef_) => {
                 polynomial_kernel_2d(self.support_vectors.view(), input.view(), degree, coef_)
             }
@@ -211,6 +210,16 @@ impl SVCBuilder {
 
         let scores = weights.dot(&values.view()) + self.bias;
         todo!()
+    }
+
+    pub fn predict_raw(&self, input: ArrayView2<f64>) -> Array1<f64> {
+        let weights =
+            self.support_labels.map(|x| x.to_f64().unwrap()).to_owned() * self.alphas.view();
+        let distance = self.kernel_op_mixed(
+            self.support_labels.map(|x| x.to_f64().unwrap()).view(),
+            input,
+        );
+        weights * distance + self.bias
     }
 
     pub fn heuristic_1(&self, error_cache: ArrayView1<f64>, i2: isize) -> usize {
@@ -272,7 +281,7 @@ impl SVCBuilder {
         let row = self.support_vectors.row(index);
         let mut row_2d = Array2::zeros((1, row.len()));
         row_2d.row_mut(1).assign(&row.view());
-        let score = self.predict(row_2d.view())[0] as f64;
+        let score = self.predict_raw(row_2d.view())[0] as f64;
         let label_index = self.support_labels[index];
         let residual = label_index as f64 * score - 1f64;
         let condition_one = (alpha_index < self.C) && (residual < -self.kkt_value);
@@ -286,7 +295,7 @@ impl SVCBuilder {
             Array2::from_shape_fn((alphas.len(), self.support_vectors.ncols()), |(x, y)| {
                 self.support_vectors[(indices[x], y)]
             });
-        let scores = self.predict(array.view()).map(|x| x.to_f64().unwrap());
+        let scores = self.predict_raw(array.view()).map(|x| x.to_f64().unwrap());
         let label_indices = Array1::from_shape_fn(indices.len(), |x| {
             self.support_labels[indices[x]].to_f64().unwrap()
         });
@@ -322,58 +331,90 @@ impl SVCBuilder {
     }
 
     pub fn compute_eta(&self, row_one: ArrayView1<f64>, row_two: ArrayView1<f64>) -> f64 {
-        match self.kernel {
-            SVMKernel::RBF(gamma) => {
-                let one = rbf_kernel_1d(row_one, row_one, gamma);
-                let two = rbf_kernel_1d(row_two, row_two, gamma);
-                let three = rbf_kernel_1d(row_one, row_two, gamma);
-                one + two - (three.powi(2))
-            }
-            SVMKernel::Linear => {
-                let one = linear_kernel_1d(row_one, row_one);
-                let two = linear_kernel_1d(row_two, row_two);
-                let three = linear_kernel_1d(row_one, row_two);
-                one + two - (three.powi(2))
-            }
-            SVMKernel::Polynomial(degree, coef_) => {
-                let one = polynomial_kernel_1d(row_one, row_one, degree, coef_);
-                let two = polynomial_kernel_1d(row_two, row_two, degree, coef_);
-                let three = polynomial_kernel_1d(row_one, row_two, degree, coef_);
-                one + two - (three.powi(2))
-            }
-            SVMKernel::Sigmoid(coef_, alpha) => {
-                let one = sigmoid_kernel_1d(row_one, row_one, coef_, alpha);
-                let two = sigmoid_kernel_1d(row_two, row_two, coef_, alpha);
-                let three = sigmoid_kernel_1d(row_one, row_two, coef_, alpha);
-                one + two - (three.powi(2))
-            }
+        let one = self.kernel_op_1d(row_one, row_one);
+        let two = self.kernel_op_1d(row_two, row_two);
+        let three = self.kernel_op_1d(row_one, row_two);
+        one + two - (three.powi(2))
+    }
+
+    pub fn compute_b(
+        &self,
+        new_alpha_one: f64,
+        new_alpha_two: f64,
+        error_one: f64,
+        error_two: f64,
+        i1: usize,
+        i2: usize,
+    ) -> f64 {
+        let (feature_one, feature_two) =
+            (self.support_vectors.row(i1), self.support_vectors.row(i2));
+        let b1 = self.bias
+            - error_one
+            - self.support_labels[i1] as f64
+                * (new_alpha_one - self.alphas[i1])
+                * self.kernel_op_1d(feature_one, feature_one)
+            - self.support_labels[i2] as f64 * (new_alpha_two - self.alphas[i2])
+            - self.kernel_op_1d(feature_one, feature_one);
+        let b2 = self.bias
+            - error_two
+            - self.support_labels[i1] as f64
+                * (new_alpha_one - self.alphas[i1])
+                * self.kernel_op_1d(feature_one, feature_two)
+            - self.support_labels[i2] as f64
+                * (new_alpha_two - self.alphas[i2])
+                * self.kernel_op_1d(feature_two, feature_two);
+        if (0f64 < new_alpha_one) && (new_alpha_one < self.C) {
+            b1
+        } else if (0f64 < new_alpha_two) && (new_alpha_two < self.C) {
+            b2
+        } else {
+            (b1 + b2) / 2f64
         }
     }
 
     pub fn kernel_op_1d(&self, row_one: ArrayView1<f64>, row_two: ArrayView1<f64>) -> f64 {
         match self.kernel {
-            SVMKernel::RBF(gamma) => {
-                let three = rbf_kernel_1d(row_one, row_two, gamma);
-                three
-            }
-            SVMKernel::Linear => {
-                let three = linear_kernel_1d(row_one, row_two);
-                three
-            }
+            SVMKernel::RBF(gamma) => rbf_kernel_1d(row_one, row_two, gamma),
+            SVMKernel::Linear => linear_kernel_1d(row_one, row_two),
             SVMKernel::Polynomial(degree, coef_) => {
-                let three = polynomial_kernel_1d(row_one, row_two, degree, coef_);
-                three
+                polynomial_kernel_1d(row_one, row_two, degree, coef_)
+            }
+            SVMKernel::Sigmoid(coef_, alpha) => sigmoid_kernel_1d(row_one, row_two, coef_, alpha),
+        }
+    }
+    pub fn kernel_op_2d(&self, row_one: ArrayView2<f64>, row_two: ArrayView2<f64>) -> Array2<f64> {
+        match self.kernel {
+            SVMKernel::RBF(gamma) => rbf_kernel_2d(row_one, row_two, gamma),
+            SVMKernel::Polynomial(degree, coef_) => {
+                polynomial_kernel_2d(row_one, row_two, degree, coef_)
+            }
+            SVMKernel::Sigmoid(coef_, alpha) => sigmoid_kernel_2d(row_one, row_two, coef_, alpha),
+            SVMKernel::Linear => linear_kernel_2d(row_one, row_two),
+        }
+    }
+
+    pub fn kernel_op_mixed(
+        &self,
+        row_one: ArrayView1<f64>,
+        row_two: ArrayView2<f64>,
+    ) -> Array1<f64> {
+        match self.kernel {
+            SVMKernel::RBF(gamma) => rbf_kernel_mixed(row_one, row_two, gamma),
+            SVMKernel::Polynomial(degree, coef_) => {
+                polynomial_kernel_mixed(row_one, row_two, degree, coef_)
             }
             SVMKernel::Sigmoid(coef_, alpha) => {
-                let three = sigmoid_kernel_1d(row_one, row_two, coef_, alpha);
-                three
+                sigmoid_kernel_mixed(row_one, row_two, coef_, alpha)
             }
+            SVMKernel::Linear => linear_kernel_mixed(row_one, row_two),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn test_something() {}
 }
