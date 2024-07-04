@@ -126,10 +126,10 @@ impl SVCBuilder {
         target: ArrayView1<u32>,
         epochs: usize,
         kernel: &SVMKernel,
-    ) {
+    ) -> (Array2<f64>, Array1<f64>, Array1<f64>) {
+        let mut bias;
         let (nrows, ncols) = (features.nrows(), features.ncols());
         let target = target.map(|x| x.to_f64().unwrap()).to_owned();
-        let mut bias = 0.0;
         let mut alphas: Array1<f64> = Array1::zeros(nrows);
         let mut support_labels = target.to_owned();
         let mut support_vectors = features.to_owned();
@@ -172,8 +172,6 @@ impl SVCBuilder {
             let holder_two = Array2::from_shape_fn((1, nrows), |(_, y)| feature_two[y]);
             let score_one = self.predict_raw(holder_one.view());
             let score_two = self.predict_raw(holder_two.view());
-            drop(holder_one);
-            drop(holder_two);
             //predict should not return u32s!
             let e1 = score_one[0] as f64 - label_one as f64;
             let e2 = score_two[0] as f64 - label_two as f64;
@@ -182,7 +180,27 @@ impl SVCBuilder {
             alpha_two_new = alpha_two_new.max(lower);
             let alpha_one_new =
                 alpha_one + label_one as f64 * label_two as f64 * (alpha_two - alpha_two_new);
+            bias = self.compute_b(alpha_one_new, alpha_two_new, e1, e2, i1, i2 as usize);
+            alphas[i1] = alpha_one_new;
+            alphas[i2 as usize] = alpha_two_new;
+            error_cache[i1] = self.predict_raw(holder_one.view())[0] - label_one as f64;
+            error_cache[i2 as usize] = self.predict_raw(holder_two.view())[0] - label_two as f64;
         }
+        let support_indices = alphas
+            .iter()
+            .enumerate()
+            .filter(|(__, value)| **value != 0f64)
+            .map(|(index, _)| index)
+            .collect::<Array1<usize>>();
+        support_labels = Array1::from_shape_fn(support_indices.len(), |x| {
+            support_labels[support_indices[x]]
+        });
+        support_vectors = Array2::from_shape_fn(
+            (support_indices.len(), support_vectors.ncols()),
+            |(x, y)| support_vectors[(support_indices[x], y)],
+        );
+        alphas = Array1::from_shape_fn(support_indices.len(), |x| alphas[support_indices[x]]);
+        (support_vectors, support_labels, alphas)
     }
 
     pub fn multiclass_fit(
@@ -191,7 +209,7 @@ impl SVCBuilder {
         epochs: usize,
         nclasses: usize,
         kernel: &SVMKernel,
-    ) {
+    ) -> (Array2<f64>, Array1<f64>, Array1<f64>) {
         todo!()
     }
 
