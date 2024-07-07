@@ -4,7 +4,7 @@ use std::ops::Neg;
 
 pub mod svc;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 //the SVM kernels to use
 pub enum SVMKernel {
     RBF(f64),

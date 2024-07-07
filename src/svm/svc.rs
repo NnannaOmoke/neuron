@@ -16,8 +16,8 @@ use crate::{
 use ndarray::{array, Array1, ArrayView1};
 use num_traits::ToPrimitive;
 use rayon::prelude::*;
-use std::cell::RefCell;
 use std::sync::{Arc, RwLock};
+use std::{cell::RefCell, collections::HashSet};
 pub struct SVCBuilder {
     C: f64,
     kkt_value: f64,
@@ -30,7 +30,7 @@ pub struct SVCBuilder {
     scaler: ScalerState,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 struct RawSVC {
     C: f64,
     kkt_value: f64,
@@ -49,13 +49,16 @@ impl RawSVC {
         epochs: usize,
     ) {
         let mut bias = 0.0;
-        let (nrows, _) = (features.nrows(), features.ncols());
-        let target = target.map(|x| x.to_f64().unwrap()).to_owned();
+        let (nrows, ncols) = (features.nrows(), features.ncols());
+        let target = target.map(|x| x.to_i32().unwrap()).to_owned();
         let mut alphas: Array1<f64> = Array1::zeros(nrows);
         let mut support_labels = target.to_owned();
         let mut support_vectors = features.to_owned();
         let mut non_kkt_array = Array1::from_shape_fn(nrows, |x| x);
-        let mut error_cache = self.predict_raw(features).to_owned() - target;
+        self.alphas = alphas;
+        self.support_labels = support_labels;
+        self.support_vectors = support_vectors;
+        let mut error_cache = self.predict_raw(features).to_owned() - target.map(|x| *x as f64);
         for _ in 0..epochs {
             let i2 = self.heuristic_2(&mut non_kkt_array);
             if i2 == -1 {
@@ -85,8 +88,8 @@ impl RawSVC {
             if eta == 0f64 {
                 continue;
             }
-            let holder_one = Array2::from_shape_fn((1, nrows), |(_, y)| feature_one[y]);
-            let holder_two = Array2::from_shape_fn((1, nrows), |(_, y)| feature_two[y]);
+            let holder_one = Array2::from_shape_fn((1, ncols), |(_, y)| feature_one[y]);
+            let holder_two = Array2::from_shape_fn((1, ncols), |(_, y)| feature_two[y]);
             let score_one = self.predict_raw(holder_one.view());
             let score_two = self.predict_raw(holder_two.view());
             //predict should not return u32s!
@@ -98,25 +101,26 @@ impl RawSVC {
             let alpha_one_new =
                 alpha_one + label_one as f64 * label_two as f64 * (alpha_two - alpha_two_new);
             bias = self.compute_b(alpha_one_new, alpha_two_new, e1, e2, i1, i2 as usize);
-            alphas[i1] = alpha_one_new;
-            alphas[i2 as usize] = alpha_two_new;
+            self.alphas[i1] = alpha_one_new;
+            self.alphas[i2 as usize] = alpha_two_new;
             error_cache[i1] = self.predict_raw(holder_one.view())[0] - label_one as f64;
             error_cache[i2 as usize] = self.predict_raw(holder_two.view())[0] - label_two as f64;
         }
-        let support_indices = alphas
+        let support_indices = self
+            .alphas
             .iter()
             .enumerate()
             .filter(|(__, value)| **value != 0f64)
             .map(|(index, _)| index)
             .collect::<Array1<usize>>();
         support_labels = Array1::from_shape_fn(support_indices.len(), |x| {
-            support_labels[support_indices[x]]
+            self.support_labels[support_indices[x]]
         });
         support_vectors = Array2::from_shape_fn(
-            (support_indices.len(), support_vectors.ncols()),
-            |(x, y)| support_vectors[(support_indices[x], y)],
+            (support_indices.len(), self.support_vectors.ncols()),
+            |(x, y)| self.support_vectors[(support_indices[x], y)],
         );
-        alphas = Array1::from_shape_fn(support_indices.len(), |x| alphas[support_indices[x]]);
+        alphas = Array1::from_shape_fn(support_indices.len(), |x| self.alphas[support_indices[x]]);
         self.support_vectors = support_vectors;
         self.bias = bias;
         self.support_labels = support_labels.map(|x| x.to_i32().unwrap());
@@ -125,11 +129,8 @@ impl RawSVC {
     pub fn predict_raw(&self, input: ArrayView2<f64>) -> Array1<f64> {
         let weights =
             self.support_labels.map(|x| x.to_f64().unwrap()).to_owned() * self.alphas.view();
-        let distance = self.kernel_op_mixed(
-            self.support_labels.map(|x| x.to_f64().unwrap()).view(),
-            input,
-        );
-        weights * distance + self.bias
+        let distance = self.kernel_op_2d(self.support_vectors.view(), input);
+        weights.dot(&distance.view()) + self.bias
     }
 
     pub fn heuristic_1(&self, error_cache: ArrayView1<f64>, i2: isize) -> usize {
@@ -180,7 +181,7 @@ impl RawSVC {
                 //TODO: shuffle
                 //still stuff to do
                 init_i2 = non_kkt_array[0] as isize;
-                *non_kkt_array = not_kkt_array.slice(ndarray::s![1..-1]).to_owned();
+                *non_kkt_array = not_kkt_array.slice(ndarray::s![1..]).to_owned();
             }
         }
         init_i2
@@ -190,13 +191,14 @@ impl RawSVC {
         let alpha_index = self.alphas[index];
         let row = self.support_vectors.row(index);
         let mut row_2d = Array2::zeros((1, row.len()));
-        row_2d.row_mut(1).assign(&row.view());
-        let score = self.predict_raw(row_2d.view())[0] as f64;
+        row_2d.row_mut(0).assign(&row.view());
+        let score = self.predict_raw(row_2d.view());
+        let score = score[0];
         let label_index = self.support_labels[index];
         let residual = label_index as f64 * score - 1f64;
         let condition_one = (alpha_index < self.C) && (residual < -self.kkt_value);
         let condition_two = (alpha_index > 0f64) && (residual > self.kkt_value);
-        !(condition_one | condition_two)
+        !(condition_one || condition_two)
     }
 
     fn check_kkt_multi(&self, indices: ArrayView1<usize>) -> Array1<bool> {
@@ -216,7 +218,7 @@ impl RawSVC {
         let condition_two = Array1::from_shape_fn(alphas.len(), |x| {
             (alphas[x] > 0f64) && (residuals[x] > self.kkt_value)
         });
-        let res = Array1::from_shape_fn(alphas.len(), |x| !(condition_one[x] | condition_two[x]));
+        let res = Array1::from_shape_fn(alphas.len(), |x| !(condition_one[x] || condition_two[x]));
         res
     }
 
@@ -229,13 +231,12 @@ impl RawSVC {
     ) -> (f64, f64) {
         let lower_bound: f64;
         let upper_bound: f64;
-
         if label_one == label_two {
             lower_bound = 0f64.max(alpha_one + alpha_two - self.C);
             upper_bound = self.C.min(alpha_one + alpha_two);
         } else {
-            lower_bound = 0f64.max(alpha_one - alpha_two);
-            upper_bound = self.C.min(alpha_two - alpha_one);
+            lower_bound = 0f64.max(alpha_two - alpha_one);
+            upper_bound = self.C.min(self.C + alpha_two - alpha_one);
         }
         (lower_bound, upper_bound)
     }
@@ -437,6 +438,7 @@ impl SVCBuilder {
                     let mut current_estimator = self.svms[class].clone();
                     let curr_ref = estimators.clone();
                     s.spawn_fifo(move |_| {
+                        let class = class;
                         let labels =
                             labels.map(|x| if *x as usize == class { 1i32 } else { -1i32 });
                         current_estimator.binomial_fit(features, labels.view(), 20);
@@ -500,7 +502,43 @@ impl SVCBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::metrics::accuracy;
+    use std::path::Path;
+    #[test]
+    fn test_convergence_svc_bi() {
+        let dataset = BaseDataset::from_csv(
+            Path::new("src/base_array/test_data/diabetes.csv"),
+            true,
+            true,
+            b',',
+        );
+        let dataset = dataset.unwrap();
+        let mut svc = SVCBuilder::new()
+            .scaler(ScalerState::MinMax)
+            .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7))
+            .kernel(SVMKernel::RBF(0.01))
+            .set_c(1f64);
+        svc.fit(&dataset, "Outcome");
+        let value = svc.evaluate(accuracy)[0];
+        dbg!(value);
+    }
 
     #[test]
-    fn test_something() {}
+    fn test_convergence_svc_multi() {
+        let dataset = BaseDataset::from_csv(
+            Path::new("src/base_array/test_data/IRIS.csv"),
+            true,
+            true,
+            b',',
+        );
+        let dataset = dataset.unwrap();
+        let mut svc = SVCBuilder::new()
+            .scaler(ScalerState::MinMax)
+            .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7))
+            .set_c(1f64)
+            .kernel(SVMKernel::RBF(0.01));
+        svc.fit(&dataset, "species");
+        let value = svc.evaluate(accuracy)[0];
+        dbg!(value);
+    }
 }
