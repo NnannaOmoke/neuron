@@ -4,11 +4,12 @@ use std::ops::Neg;
 
 pub mod svc;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 //the SVM kernels to use
 pub enum SVMKernel {
     RBF(f64),
     Polynomial(u32, f64),
+    #[default]
     Linear,
     Sigmoid(f64, f64),
 }

@@ -15,16 +15,14 @@ use crate::{
 
 use ndarray::{array, Array1, ArrayView1};
 use num_traits::ToPrimitive;
-
-#[derive(Clone)]
+use rayon::prelude::*;
+use std::cell::RefCell;
+use std::sync::{Arc, RwLock};
 pub struct SVCBuilder {
     C: f64,
     kkt_value: f64,
     kernel: SVMKernel,
-    bias: f64,
-    alphas: Array1<f64>,
-    support_vectors: Array2<f64>,
-    support_labels: Array1<u32>,
+    svms: Vec<RawSVC>,
     strategy: TrainTestSplitStrategy,
     data: TrainTestSplitStrategyData<f64, u32>,
     target_index: usize,
@@ -32,113 +30,32 @@ pub struct SVCBuilder {
     scaler: ScalerState,
 }
 
-impl SVCBuilder {
-    pub fn new() -> Self {
-        Self {
-            C: 0.0,
-            kkt_value: 1e-3, //reasonable default
-            kernel: SVMKernel::Linear,
-            strategy: TrainTestSplitStrategy::None,
-            data: TrainTestSplitStrategyData::default(),
-            target_index: 0,
-            nclasses: 0,
-            bias: 0.0,
-            alphas: Array1::default(0),
-            support_vectors: Array2::default((0, 0)),
-            support_labels: Array1::default(0),
-            scaler: ScalerState::default(),
-        }
-    }
+#[derive(Default, Clone)]
+struct RawSVC {
+    C: f64,
+    kkt_value: f64,
+    support_vectors: Array2<f64>,
+    support_labels: Array1<i32>,
+    alphas: Array1<f64>,
+    bias: f64,
+    kernel: SVMKernel,
+}
 
-    pub fn bias(&self) -> f64 {
-        self.bias
-    }
-
-    pub fn support_vectors(&self) -> (ArrayView2<f64>, ArrayView1<u32>) {
-        (self.support_vectors.view(), self.support_labels.view())
-    }
-
-    pub fn alphas(&self) -> ArrayView1<f64> {
-        self.alphas.view()
-    }
-
-    pub fn set_kkt(self, value: f64) -> Self {
-        Self {
-            kkt_value: value,
-            ..self
-        }
-    }
-
-    pub fn scaler(self, scaler: ScalerState) -> Self {
-        Self { scaler, ..self }
-    }
-
-    pub fn train_test_split_strategy(self, strategy: TrainTestSplitStrategy) -> Self {
-        Self { strategy, ..self }
-    }
-
-    pub fn set_c(self, c: f64) -> Self {
-        Self { C: c, ..self }
-    }
-
-    pub fn kernel(self, kernel: SVMKernel) -> Self {
-        Self { kernel, ..self }
-    }
-
-    //TODO: put this in a trait, because ATP it's boilerplate
-    pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
-        self.target_index = dataset._get_string_index(target);
-        self.nclasses = dataset.nunique(target);
-        self.data = TrainTestSplitStrategyData::<f64, u32>::new_c(
-            dataset,
-            self.target_index,
-            self.strategy,
-        );
-        let mut scaler = Scaler::from(&self.scaler);
-        scaler.fit(self.data.get_train().0);
-        scaler.transform(&mut self.data.get_train_mut().0);
-        match self.strategy {
-            TrainTestSplitStrategy::TrainTest(_) => {
-                scaler.transform(&mut self.data.get_test_mut().0);
-            }
-            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
-                scaler.transform(&mut self.data.get_test_mut().0);
-                scaler.transform(&mut self.data.get_eval_mut().0);
-            }
-            TrainTestSplitStrategy::None => {}
-        };
-        self.internal_fit();
-    }
-
-    pub fn internal_fit(&mut self) {
-        let (features, labels) = self.data.get_train();
-        let kernel_ref = &self.kernel;
-        let information = match self.nclasses {
-            1 => panic!("Not enough classes"),
-            2 => self.binomial_fit(features, labels, 20, kernel_ref),
-            other => Self::multiclass_fit(features.view(), labels.view(), 20, other, &self.kernel),
-        };
-    }
-
+impl RawSVC {
     pub fn binomial_fit(
-        &self,
+        &mut self,
         features: ArrayView2<f64>,
-        target: ArrayView1<u32>,
+        target: ArrayView1<i32>,
         epochs: usize,
-        kernel: &SVMKernel,
-    ) -> (Array2<f64>, Array1<f64>, Array1<f64>) {
-        let mut bias;
-        let (nrows, ncols) = (features.nrows(), features.ncols());
+    ) {
+        let mut bias = 0.0;
+        let (nrows, _) = (features.nrows(), features.ncols());
         let target = target.map(|x| x.to_f64().unwrap()).to_owned();
         let mut alphas: Array1<f64> = Array1::zeros(nrows);
         let mut support_labels = target.to_owned();
         let mut support_vectors = features.to_owned();
         let mut non_kkt_array = Array1::from_shape_fn(nrows, |x| x);
-        let mut error_cache = self
-            .predict(features)
-            .map(|x| x.to_f64().unwrap())
-            .to_owned()
-            - target;
+        let mut error_cache = self.predict_raw(features).to_owned() - target;
         for _ in 0..epochs {
             let i2 = self.heuristic_2(&mut non_kkt_array);
             if i2 == -1 {
@@ -200,36 +117,11 @@ impl SVCBuilder {
             |(x, y)| support_vectors[(support_indices[x], y)],
         );
         alphas = Array1::from_shape_fn(support_indices.len(), |x| alphas[support_indices[x]]);
-        (support_vectors, support_labels, alphas)
+        self.support_vectors = support_vectors;
+        self.bias = bias;
+        self.support_labels = support_labels.map(|x| x.to_i32().unwrap());
+        self.alphas = alphas;
     }
-
-    pub fn multiclass_fit(
-        features: ArrayView2<f64>,
-        target: ArrayView1<u32>,
-        epochs: usize,
-        nclasses: usize,
-        kernel: &SVMKernel,
-    ) -> (Array2<f64>, Array1<f64>, Array1<f64>) {
-        todo!()
-    }
-
-    pub fn predict(&self, input: ArrayView2<f64>) -> Array1<u32> {
-        let weights = self.support_vectors.clone() * self.alphas.view();
-        let values = match self.kernel {
-            SVMKernel::RBF(gamma) => rbf_kernel_2d(self.support_vectors.view(), input, gamma),
-            SVMKernel::Polynomial(degree, coef_) => {
-                polynomial_kernel_2d(self.support_vectors.view(), input.view(), degree, coef_)
-            }
-            SVMKernel::Sigmoid(coef_, alpha) => {
-                sigmoid_kernel_2d(self.support_vectors.view(), input.view(), coef_, alpha)
-            }
-            SVMKernel::Linear => linear_kernel_2d(self.support_vectors.view(), input.view()),
-        };
-
-        let scores = weights.dot(&values.view()) + self.bias;
-        todo!()
-    }
-
     pub fn predict_raw(&self, input: ArrayView2<f64>) -> Array1<f64> {
         let weights =
             self.support_labels.map(|x| x.to_f64().unwrap()).to_owned() * self.alphas.view();
@@ -332,8 +224,8 @@ impl SVCBuilder {
         &self,
         alpha_one: f64,
         alpha_two: f64,
-        label_one: u32,
-        label_two: u32,
+        label_one: i32,
+        label_two: i32,
     ) -> (f64, f64) {
         let lower_bound: f64;
         let upper_bound: f64;
@@ -426,6 +318,182 @@ impl SVCBuilder {
             }
             SVMKernel::Linear => linear_kernel_mixed(row_one, row_two),
         }
+    }
+}
+
+impl SVCBuilder {
+    pub fn new() -> Self {
+        Self {
+            C: 0.0,
+            kkt_value: 1e-3,
+            kernel: SVMKernel::Linear,
+            svms: vec![],
+            strategy: TrainTestSplitStrategy::None,
+            data: TrainTestSplitStrategyData::default(),
+            target_index: 0,
+            nclasses: 0,
+            scaler: ScalerState::default(),
+        }
+    }
+
+    pub fn bias(&self) -> Array1<f64> {
+        self.svms.iter().map(|x| x.bias).collect()
+    }
+
+    pub fn support_vectors(&self) -> Array1<(ArrayView2<f64>, ArrayView1<i32>)> {
+        self.svms
+            .iter()
+            .map(|x| (x.support_vectors.view(), x.support_labels.view()))
+            .collect()
+    }
+
+    pub fn alphas(&self) -> Array1<ArrayView1<f64>> {
+        self.svms
+            .iter()
+            .map(|x| x.alphas.view())
+            .collect::<Array1<ArrayView1<f64>>>()
+    }
+
+    pub fn set_kkt(self, value: f64) -> Self {
+        Self {
+            kkt_value: value,
+            ..self
+        }
+    }
+
+    pub fn scaler(self, scaler: ScalerState) -> Self {
+        Self { scaler, ..self }
+    }
+
+    pub fn train_test_split_strategy(self, strategy: TrainTestSplitStrategy) -> Self {
+        Self { strategy, ..self }
+    }
+
+    pub fn set_c(self, c: f64) -> Self {
+        Self { C: c, ..self }
+    }
+
+    pub fn kernel(self, kernel: SVMKernel) -> Self {
+        Self { kernel, ..self }
+    }
+
+    //TODO: put this in a trait, because ATP it's boilerplate
+    pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
+        self.target_index = dataset._get_string_index(target);
+        self.nclasses = dataset.nunique(target);
+        self.data = TrainTestSplitStrategyData::<f64, u32>::new_c(
+            dataset,
+            self.target_index,
+            self.strategy,
+        );
+        let mut scaler = Scaler::from(&self.scaler);
+        scaler.fit(self.data.get_train().0);
+        scaler.transform(&mut self.data.get_train_mut().0);
+        match self.strategy {
+            TrainTestSplitStrategy::TrainTest(_) => {
+                scaler.transform(&mut self.data.get_test_mut().0);
+            }
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
+                scaler.transform(&mut self.data.get_test_mut().0);
+                scaler.transform(&mut self.data.get_eval_mut().0);
+            }
+            TrainTestSplitStrategy::None => {}
+        };
+        self.internal_fit();
+    }
+
+    pub fn internal_fit(&mut self) {
+        let (features, labels) = self.data.get_train();
+        if self.nclasses == 1 {
+            panic!("Not enough classes");
+        }
+        if self.nclasses == 2 {
+            //train 1 svm
+            //initialize it with details needed
+            let mut estimator = RawSVC::default();
+            //add in the characteristics
+            estimator.C = self.C;
+            estimator.kernel = self.kernel.clone();
+            estimator.kkt_value = self.kkt_value;
+            //train the estimator
+            let labels = labels.map(|x| if *x == 0 { 1i32 } else { -1i32 });
+            estimator.binomial_fit(features, labels.view(), 20);
+            self.svms.push(estimator);
+        }
+        if self.nclasses > 2 {
+            //we need a multithreaded multinomial fit
+            //ideally we can actually even use a parallel iterator but it might get too messy
+            (0..self.nclasses).for_each(|_| {
+                let mut estimator = RawSVC::default();
+                estimator.C = self.C;
+                estimator.kkt_value = self.kkt_value;
+                estimator.kernel = self.kernel.clone();
+                self.svms.push(estimator);
+            });
+            let vector = Vec::from_iter((0..self.nclasses).map(|_| RawSVC::default()));
+            let estimators = Arc::new(RwLock::new(vector));
+            rayon::scope_fifo(|s| {
+                for class in 0..self.nclasses {
+                    let mut current_estimator = self.svms[class].clone();
+                    let curr_ref = estimators.clone();
+                    s.spawn_fifo(move |_| {
+                        let labels =
+                            labels.map(|x| if *x as usize == class { 1i32 } else { -1i32 });
+                        current_estimator.binomial_fit(features, labels.view(), 20);
+                        let mut lock = curr_ref.write().unwrap();
+                        lock[class] = current_estimator;
+                        drop(lock);
+                    });
+                }
+            });
+            //estimators should hopefully contain the raw svcs, and since execution of their fits should be done...
+            //we can just do this:
+            self.svms = Arc::into_inner(estimators).unwrap().into_inner().unwrap();
+        }
+    }
+
+    fn predict_scores_one_class(&self, data: ArrayView2<f64>) -> Array1<f64> {
+        self.svms[0].predict_raw(data)
+    }
+
+    fn predict_scores_multi_class(&self, data: ArrayView2<f64>) -> Array2<f64> {
+        let mut allocated = Array2::from_elem((data.nrows(), self.nclasses), 0f64);
+        self.svms.iter().enumerate().for_each(|(index, svm)| {
+            allocated
+                .column_mut(index)
+                .assign(&svm.predict_raw(data).view())
+        });
+        allocated
+    }
+
+    pub fn predict_scores(&self, data: ArrayView2<f64>) -> Array2<f64> {
+        self.predict_scores_multi_class(data)
+    }
+
+    pub fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
+        if self.nclasses == 2 {
+            let scores = self.predict_scores_one_class(data);
+            scores.map(|x| if *x >= 0f64 { 1 } else { 0 })
+        } else {
+            let scores = self.predict_scores_multi_class(data);
+            Array1::from_shape_fn(data.nrows(), |x| argmax_1d_f64(scores.row(x)) as u32)
+        }
+    }
+
+    pub fn evaluate<F>(&self, function: F) -> Vec<f64>
+    where
+        F: Fn(ArrayView1<u32>, ArrayView1<u32>) -> Vec<f64>,
+    {
+        let (features, ground_truth) = match self.strategy {
+            TrainTestSplitStrategy::None => {
+                //get train data
+                self.data.get_train()
+            }
+            TrainTestSplitStrategy::TrainTest(_) => self.data.get_test(),
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => self.data.get_eval(),
+        };
+        let preds = self.predict(features);
+        function(ground_truth, preds.view())
     }
 }
 
