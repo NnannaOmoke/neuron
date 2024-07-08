@@ -1,5 +1,7 @@
 use std::sync::OnceLock;
 
+pub const SHADER_MAIN_NAME: &'static str = "main";
+
 #[derive(Default)]
 pub struct Shaders {
     dot_in_place: OnceLock<wgpu::ShaderModule>,
