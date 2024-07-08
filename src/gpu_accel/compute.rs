@@ -1,15 +1,14 @@
 use super::{context::GpuContext, shaders::{Shaders, SHADER_MAIN_NAME}};
 use std::{
-    ops::Deref,
-    sync::{Arc, OnceLock},
+    borrow::Borrow, ops::Deref, sync::{Arc, OnceLock}
 };
 
-pub struct ComputeContext<GpuContextPtr: Deref<Target = GpuContext>> {
+pub struct ComputeContext<GpuContextPtr: Borrow<GpuContext>> {
     gpu_context: GpuContextPtr,
     pipelines: WgpuPipelines,
 }
 
-impl<GpuContextPtr: Deref<Target = GpuContext>> ComputeContext<GpuContextPtr> {
+impl<GpuContextPtr: Borrow<GpuContext>> ComputeContext<GpuContextPtr> {
     pub fn create_pipeline(&self) -> OperationPipeline<GpuContextPtr, &Self> {
         OperationPipeline::new(self)
     }
@@ -21,7 +20,7 @@ impl<GpuContextPtr: Deref<Target = GpuContext>> ComputeContext<GpuContextPtr> {
 
 pub struct OperationPipeline<GpuContextPtr, ComputeContextPtr>
 where
-    GpuContextPtr: Deref<Target = GpuContext>,
+    GpuContextPtr: Borrow<GpuContext>,
     ComputeContextPtr: Deref<Target = ComputeContext<GpuContextPtr>>,
 {
     compute_context: ComputeContextPtr,
@@ -30,7 +29,7 @@ where
 
 impl<GpuContextPtr, ComputeContextPtr> OperationPipeline<GpuContextPtr, ComputeContextPtr>
 where
-    GpuContextPtr: Deref<Target = GpuContext>,
+    GpuContextPtr: Borrow<GpuContext>,
     ComputeContextPtr: Deref<Target = ComputeContext<GpuContextPtr>>,
 {
     pub fn create_command_buffer(&self, label: Option<&str>) -> wgpu::CommandBuffer {
@@ -45,6 +44,7 @@ where
         let mut command_encoder = self
             .compute_context
             .gpu_context
+            .borrow()
             .device()
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label });
         for operation in &self.operations {
