@@ -8,6 +8,16 @@ pub struct ComputeContext<GpuContextPtr: Deref<Target = GpuContext>> {
     gpu_context: GpuContextPtr,
 }
 
+impl<GpuContextPtr: Deref<Target = GpuContext>> ComputeContext<GpuContextPtr> {
+    pub fn create_pipeline(&self) -> OperationPipeline<GpuContextPtr, &Self> {
+        OperationPipeline::new(self)
+    }
+
+    pub fn create_pipeline_arc(self: Arc<Self>) -> OperationPipeline<GpuContextPtr, Arc<Self>> {
+        OperationPipeline::new(self)
+    }
+}
+
 pub struct OperationPipeline<GpuContextPtr, ComputeContextPtr>
 where
     GpuContextPtr: Deref<Target = GpuContext>,
@@ -41,6 +51,20 @@ where
         }
 
         command_encoder
+    }
+
+    pub fn new(compute_context: ComputeContextPtr) -> Self {
+        Self {
+            compute_context,
+            operations: Vec::new(),
+        }
+    }
+
+    pub fn new_with_operations(compute_context: ComputeContextPtr, operations: Vec<Operation>) -> Self {
+        Self {
+            compute_context,
+            operations,
+        }
     }
 
     pub fn push_operation(&mut self, operation: Operation) {
