@@ -10,6 +10,7 @@ pub mod gpu_accel;
 pub mod linear_models;
 pub mod svm;
 pub mod utils;
+pub mod trees;
 
 //All imports are defined here and made (pub)crate
 pub(crate) use core::{
