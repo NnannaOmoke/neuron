@@ -1,6 +1,11 @@
-use super::{context::GpuContext, shaders::{Shaders, SHADER_MAIN_NAME}};
+use super::{
+    context::GpuContext,
+    shaders::{Shaders, SHADER_MAIN_NAME},
+};
 use std::{
-    borrow::Borrow, ops::Deref, sync::{Arc, OnceLock}
+    borrow::Borrow,
+    ops::Deref,
+    sync::{Arc, OnceLock},
 };
 
 pub struct ComputeContext<GpuContextPtr: Borrow<GpuContext>> {
@@ -54,6 +59,31 @@ where
         command_encoder
     }
 
+    /// Begins execution of this pipeline on the indirectly attached [`GpuContext`]'s device
+    ///
+    /// This pipeline's operations are not guarenteed to finish before the function execution
+    /// ends.
+    pub fn begin_execution(&self) -> wgpu::SubmissionIndex {
+        let command_buffer =
+            self.create_command_buffer(Some("Neuron operation pipeline execution command buffer"));
+        self.compute_context
+            .gpu_context
+            .borrow()
+            .queue()
+            .submit([command_buffer])
+    }
+
+    /// Fully executes this pipeline on the indirectly attached [`GpuContext`]'s device and
+    /// awaits the execution's completion.
+    pub fn execute(&self) {
+        let submission_index = self.begin_execution();
+        self.compute_context
+            .gpu_context
+            .borrow()
+            .device()
+            .poll(wgpu::Maintain::WaitForSubmissionIndex(submission_index));
+    }
+
     pub fn new(compute_context: ComputeContextPtr) -> Self {
         Self {
             compute_context,
@@ -61,7 +91,10 @@ where
         }
     }
 
-    pub fn new_with_operations(compute_context: ComputeContextPtr, operations: Vec<Operation>) -> Self {
+    pub fn new_with_operations(
+        compute_context: ComputeContextPtr,
+        operations: Vec<Operation>,
+    ) -> Self {
         Self {
             compute_context,
             operations,
@@ -80,73 +113,78 @@ pub struct WgpuPipelines {
 
 impl WgpuPipelines {
     pub fn init(&self, device: &wgpu::Device, shaders: &Shaders) {
-        const BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::COMPUTE,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        };
+        const BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT: wgpu::BindGroupLayoutEntry =
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            };
 
-        let dot_in_place_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Neuron dot-in-place binding layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                },
-            ],
-        });
+        let dot_in_place_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Neuron dot-in-place binding layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
+                    },
+                ],
+            });
         let dot_in_place_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Neuron dot-in-place layout"),
             bind_group_layouts: &[&dot_in_place_bind_group_layout],
             push_constant_ranges: &[],
         });
-        let dot_in_place_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Neuron dot-in-place pipeline"),
-            layout: Some(&dot_in_place_layout),
-            module: shaders.get_dot_in_place(device),
-            entry_point: &SHADER_MAIN_NAME,
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        });
+        let dot_in_place_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Neuron dot-in-place pipeline"),
+                layout: Some(&dot_in_place_layout),
+                module: shaders.get_dot_in_place(device),
+                entry_point: &SHADER_MAIN_NAME,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            });
         self.dot_in_place.set(dot_in_place_pipeline).ok();
 
-        let dot_extern_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Neuron dot-in-place binding layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                }
-            ],
-        });
+        let dot_extern_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Neuron dot-in-place binding layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
+                    },
+                ],
+            });
         let dot_extern_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Neuron dot-in-place layout"),
             bind_group_layouts: &[&dot_extern_bind_group_layout],
             push_constant_ranges: &[],
         });
-        let dot_extern_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Neuron dot-extern pipeline"),
-            layout: Some(&dot_extern_layout),
-            module: shaders.get_dot_in_place(device),
-            entry_point: &SHADER_MAIN_NAME,
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        });
+        let dot_extern_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Neuron dot-extern pipeline"),
+                layout: Some(&dot_extern_layout),
+                module: shaders.get_dot_in_place(device),
+                entry_point: &SHADER_MAIN_NAME,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            });
         self.dot_extern.set(dot_extern_pipeline).ok();
     }
 
@@ -155,7 +193,7 @@ impl WgpuPipelines {
         wgpu_pipelines.init(device, shaders);
         wgpu_pipelines
     }
-    
+
     pub fn new_uninit() -> Self {
         Self {
             dot_in_place: OnceLock::new(),
