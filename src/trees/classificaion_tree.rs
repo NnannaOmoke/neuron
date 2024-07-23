@@ -4,7 +4,10 @@ use std::collections::HashMap;
 use naga::proc::index;
 use ndarray::{Array2, ArrayView1, ArrayView2};
 
-use crate::{base_array::BaseDataset, utils::model_selection::{TrainTestSplitStrategy, TrainTestSplitStrategyData}};
+use crate::{
+    base_array::BaseDataset,
+    utils::model_selection::{TrainTestSplitStrategy, TrainTestSplitStrategyData},
+};
 
 struct ClassificationTreeNode {
     left: Option<Box<ClassificationTreeNode>>,
@@ -62,11 +65,7 @@ impl ClassificationTreeBuilder {
         let mut left = Vec::<usize>::new();
         let mut right = Vec::<usize>::new();
         for row in indices {
-            if *dataset
-                .get((0, feature_idx))
-                .unwrap()
-                <= threshold
-            {
+            if *dataset.get((0, feature_idx)).unwrap() <= threshold {
                 left.push(*row);
             } else {
                 right.push(*row);
@@ -83,7 +82,7 @@ impl ClassificationTreeBuilder {
         });
         entropy
     }
-    fn information_gain(parent: &[u32], left: &[u32], right: &[u32] ) -> f64 {
+    fn information_gain(parent: &[u32], left: &[u32], right: &[u32]) -> f64 {
         let parent_entropy = Self::entropy(parent);
         let w_left = left.len() as f64 / parent.len() as f64;
         let w_right = right.len() as f64 / parent.len() as f64;
@@ -93,7 +92,8 @@ impl ClassificationTreeBuilder {
         parent_entropy - wieghted_entropy
     }
     fn for_each_unique<T>(array: &[T], mut func: impl FnMut(T) -> ())
-        where T: PartialEq + Copy
+    where
+        T: PartialEq + Copy,
     {
         let mut encountered: Vec<T> = vec![];
         for val in array {
@@ -112,7 +112,8 @@ impl ClassificationTreeBuilder {
         Self::pick_values(column, index_list)
     }
     fn pick_values<T>(array: ArrayView1<T>, index_list: &[usize]) -> Vec<T>
-        where T: Copy 
+    where
+        T: Copy,
     {
         let mut out_column = Vec::<T>::new();
         for index in index_list {
@@ -120,15 +121,16 @@ impl ClassificationTreeBuilder {
         }
         out_column
     }
-    fn best_split(&self, dataset: ArrayView2<f64>, target: ArrayView1<u32>, indices: &[usize]) -> Split {
+    fn best_split(
+        &self,
+        dataset: ArrayView2<f64>,
+        target: ArrayView1<u32>,
+        indices: &[usize],
+    ) -> Split {
         let num_features = dataset.ncols();
         let mut best_split = Split::new();
         for feature_idx in 0..num_features {
-            let feature = Self::column_from_index_list(
-                dataset,
-                &indices,
-                feature_idx,
-            );
+            let feature = Self::column_from_index_list(dataset, &indices, feature_idx);
             Self::for_each_unique(&feature, |val| {
                 let (left, right) = self.split_data(dataset, indices, feature_idx, val);
                 if !left.is_empty() && !right.is_empty() {
@@ -164,7 +166,7 @@ impl ClassificationTreeBuilder {
         self.strategy_data =
             TrainTestSplitStrategyData::<f64, u32>::new_c(dataset, self.target_col, self.strategy);
         let n = self.strategy_data.get_train().0.nrows();
-        self.build_internal(Vec::from_iter(0..n),0);
+        self.build_internal(Vec::from_iter(0..n), 0);
     }
     fn build_internal(
         &mut self,
@@ -199,4 +201,3 @@ impl ClassificationTreeBuilder {
         })
     }
 }
-
