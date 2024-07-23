@@ -93,7 +93,6 @@ impl<M: Metric<f64>> KNNClassifier<M> {
         let n = self.config.n;
         let results = self.internal.query(data, n);
         let mut model_results = Array1::from_elem(data.nrows(), 0);
-        //TODO: Fix this; it's broken
         let values = Array2::from_shape_fn((results.0.nrows(), n), |(x, y)| {
             self.config.data.get_train().1[results.0[(x, y)]]
         });

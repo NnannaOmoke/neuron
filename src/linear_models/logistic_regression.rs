@@ -2,7 +2,9 @@ use crate::{
     base_array::{base_dataset::BaseDataset, BaseMatrix},
     dtype::DType,
     utils::{
-        math::{argmax_1d_f64, dot, one_hot_encode_1d, softmax_1d, solve_linear_systems},
+        math::{
+            argmax_1d_f64, dot, one_hot_encode_1d, outer_product, softmax_1d, solve_linear_systems,
+        },
         model_selection::{self, TrainTestSplitStrategy, TrainTestSplitStrategyData},
         scaler::{Scaler, ScalerState},
     },
@@ -180,7 +182,7 @@ impl LogisticRegressorBuilder {
             let curr_y = one_hot_encode_1d(labels[choice], nclasses);
             let preds = softmax_1d(curr_x.dot(&weights).view());
             let grad = curr_y.map(|x| x.to_f64().unwrap()) - preds;
-            grad_sum = grad_sum - (curr_x.inner(&grads.row(choice))) + grad.view();
+            grad_sum = grad_sum - outer_product(curr_x, grads.row(choice)) + grad.view();
             grads.row_mut(choice).assign(&grad);
             match l1_regularization {
                 Some(lambda) => {

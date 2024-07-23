@@ -116,11 +116,11 @@ pub fn shuffle_1d<T: Clone>(vector: &mut Array1<T>) {
 }
 
 pub(crate) fn into_row_matrix<T: Float>(vector: ArrayView1<T>) -> Array2<T> {
-    Array2::from_shape_fn((vector.len(), 1), |(x, y)| vector[x])
+    Array2::from_shape_fn((vector.len(), 1), |(x, _)| vector[x])
 }
 
 pub(crate) fn into_column_matrix<T: Float>(vector: ArrayView1<T>) -> Array2<T> {
-    Array2::from_shape_fn((1, vector.len()), |(x, y)| vector[y])
+    Array2::from_shape_fn((1, vector.len()), |(_, y)| vector[y])
 }
 
 pub fn outer_product<T: 'static + Float>(
