@@ -10,6 +10,7 @@ pub mod gpu_accel;
 pub mod knn;
 pub mod linear_models;
 pub mod svm;
+pub mod trees;
 pub mod utils;
 
 //All imports are defined here and made (pub)crate
