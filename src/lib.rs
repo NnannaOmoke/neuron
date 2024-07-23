@@ -7,6 +7,7 @@ pub mod base_array;
 pub mod dtype;
 #[cfg(feature = "gpu_accel")]
 pub mod gpu_accel;
+pub mod knn;
 pub mod linear_models;
 pub mod svm;
 pub mod utils;

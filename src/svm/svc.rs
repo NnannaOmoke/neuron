@@ -7,14 +7,16 @@ use crate::{
     },
     utils::model_selection::{TrainTestSplitStrategy, TrainTestSplitStrategyData},
     utils::{
-        math::{argmax_1d_f64, argmin_1d_f64},
+        math::{argmax_1d_f64, argmin_1d_f64, into_column_matrix, outer_product, shuffle_1d},
         scaler::{Scaler, ScalerState},
     },
     Array2, ArrayView2,
 };
 
-use ndarray::{array, Array1, ArrayView1};
+use ndarray::{array, Array1, ArrayView1, ArrayViewMut1};
 use num_traits::ToPrimitive;
+use rand::seq::SliceRandom;
+use rand::Rng;
 use rayon::prelude::*;
 use std::sync::{Arc, RwLock};
 use std::{cell::RefCell, collections::HashSet};
@@ -31,7 +33,7 @@ pub struct SVCBuilder {
 }
 
 #[derive(Default, Clone, Debug)]
-struct RawSVC {
+pub(crate) struct RawSVC {
     C: f64,
     kkt_value: f64,
     support_vectors: Array2<f64>,
@@ -42,184 +44,231 @@ struct RawSVC {
 }
 
 impl RawSVC {
-    pub fn binomial_fit(
-        &mut self,
-        features: ArrayView2<f64>,
-        target: ArrayView1<i32>,
-        epochs: usize,
-    ) {
-        let mut bias = 0.0;
-        let (nrows, ncols) = (features.nrows(), features.ncols());
-        let target = target.map(|x| x.to_i32().unwrap()).to_owned();
-        let mut alphas: Array1<f64> = Array1::zeros(nrows);
-        let mut support_labels = target.to_owned();
-        let mut support_vectors = features.to_owned();
-        let mut non_kkt_array = Array1::from_shape_fn(nrows, |x| x);
-        self.alphas = alphas;
-        self.support_labels = support_labels;
-        self.support_vectors = support_vectors;
-        let mut error_cache = self.predict_raw(features).to_owned() - target.map(|x| *x as f64);
-        for _ in 0..epochs {
-            let i2 = self.heuristic_2(&mut non_kkt_array);
-            if i2 == -1 {
-                break;
-            }
-            let i1 = self.heuristic_1(error_cache.view(), i2);
-            if i1 == i2 as usize {
-                continue;
-            }
-            //get samples, labels and alpha values
-            let (feature_one, label_one, alpha_one) = (
-                self.support_vectors.row(i1),
-                self.support_labels[i1],
-                self.alphas[i1],
-            );
-            let (feature_two, label_two, alpha_two) = (
-                self.support_vectors.row(i2 as usize),
-                self.support_labels[i2 as usize],
-                self.alphas[i2 as usize],
-            );
-            let (lower, upper) =
-                self.compute_boundaries(alpha_one, alpha_two, label_one, label_two);
-            if lower == upper {
-                continue;
-            }
-            let eta = self.compute_eta(feature_one, feature_two);
-            if eta == 0f64 {
-                continue;
-            }
-            let holder_one = Array2::from_shape_fn((1, ncols), |(_, y)| feature_one[y]);
-            let holder_two = Array2::from_shape_fn((1, ncols), |(_, y)| feature_two[y]);
-            let score_one = self.predict_raw(holder_one.view());
-            let score_two = self.predict_raw(holder_two.view());
-            //predict should not return u32s!
-            let e1 = score_one[0] as f64 - label_one as f64;
-            let e2 = score_two[0] as f64 - label_two as f64;
-            let mut alpha_two_new = alpha_two + label_two as f64 * (e1 - e2) / eta;
-            alpha_two_new = alpha_two_new.min(upper);
-            alpha_two_new = alpha_two_new.max(lower);
-            let alpha_one_new =
-                alpha_one + label_one as f64 * label_two as f64 * (alpha_two - alpha_two_new);
-            bias = self.compute_b(alpha_one_new, alpha_two_new, e1, e2, i1, i2 as usize);
-            self.alphas[i1] = alpha_one_new;
-            self.alphas[i2 as usize] = alpha_two_new;
-            error_cache[i1] = self.predict_raw(holder_one.view())[0] - label_one as f64;
-            error_cache[i2 as usize] = self.predict_raw(holder_two.view())[0] - label_two as f64;
+    fn take_step(&mut self, i1: usize, i2: usize, error_cache: &mut ArrayViewMut1<f64>) -> bool {
+        if i1 == i2 {
+            return false;
         }
+        let alpha_one = self.alphas[i1];
+        let alpha_two = self.alphas[i2];
+        let label1 = self.support_labels[i1];
+        let label2 = self.support_labels[i2];
+        let feature_one = self.support_vectors.row(i1);
+        let feature_two = self.support_vectors.row(i2);
+        let error1 = error_cache[i1];
+        let error2 = error_cache[i2];
+        let s = label1 * label2;
+        let (lower, upper) = self.compute_boundaries(alpha_one, alpha_two, label1, label2);
+        if upper == lower {
+            return false;
+        }
+        dbg!(error1, error2);
+        let k11 = self.kernel_op_1d(feature_one, feature_one);
+        let k22 = self.kernel_op_1d(feature_two, feature_two);
+        let k12 = self.kernel_op_1d(feature_one, feature_two);
+        let eta = k11 + k22 - (k12 * 2f64);
+        let mut alpha_two_new;
+        if eta > 0f64 {
+            alpha_two_new = alpha_two + (label2 as f64 * (error1 - error2) / eta);
+            alpha_two_new = if alpha_two_new >= upper {
+                upper
+            } else if (lower < alpha_two_new) && (alpha_two_new < upper) {
+                alpha_two_new
+            } else {
+                lower
+            };
+        } else {
+            let mut copy = self.alphas.clone();
+            copy[i2] = lower;
+            let lobj = self.objective_function(
+                copy.view(),
+                self.support_labels.map(|x| *x as f64).view(),
+                self.support_vectors.view(),
+            );
+            copy[i2] = upper;
+            let hobj = self.objective_function(
+                copy.view(),
+                self.support_labels.map(|x| *x as f64).view(),
+                self.support_vectors.view(),
+            );
+            if lobj > (hobj + self.kkt_value) {
+                alpha_two_new = lower;
+            } else if lobj < (hobj + self.kkt_value) {
+                alpha_two_new = hobj;
+            } else {
+                alpha_two_new = alpha_two;
+            }
+        }
+
+        // if alpha_two_new < 1e-9 {
+        //     alpha_two_new = 0f64;
+        // } else if alpha_two_new > (self.C - 1e-9) {
+        //     alpha_two_new = self.C;
+        // }
+        if (alpha_two_new - alpha_two).abs()
+            < self.kkt_value * (alpha_one + alpha_two_new + self.kkt_value)
+        {
+            return false;
+        }
+        let alpha_one_new = alpha_one + s as f64 * (alpha_two_new - alpha_two);
+        let bias = self.compute_b(
+            alpha_one_new,
+            alpha_two_new,
+            error1,
+            error2,
+            i1,
+            i2,
+            k11,
+            k22,
+            k12,
+        );
+        self.alphas[i1] = alpha_one_new;
+        self.alphas[i2] = alpha_two_new;
+
+        if (0f64 < alpha_two_new) && (alpha_two_new < self.C) {
+            error_cache[i2] = 0.0;
+        }
+        if (0f64 < alpha_one_new) && (alpha_one_new < self.C) {
+            error_cache[i1] = 0.0;
+        }
+        let non_optimized = (0..self.support_vectors.nrows())
+            .filter(|x| *x != i1 && *x != i2)
+            .collect::<Vec<usize>>();
+        //TODO: parallel iterators here; computing these kernels are EXTREMELY EXPENSIVE
+        non_optimized.iter().for_each(|x| {
+            error_cache[*x] = error_cache[*x]
+                + label1 as f64
+                    * (alpha_one_new - alpha_one)
+                    * self.kernel_op_1d(self.support_vectors.row(i1), self.support_vectors.row(*x))
+                + label2 as f64
+                    * (alpha_two_new - alpha_two)
+                    * self.kernel_op_1d(self.support_vectors.row(i2), self.support_vectors.row(*x))
+                + self.bias
+                - bias;
+        });
+        self.bias = bias;
+
+        // error_cache[i1] =
+        //     self.predict_raw(into_column_matrix(feature_one).view())[0] - label1 as f64;
+        // error_cache[i2] =
+        //     self.predict_raw(into_column_matrix(feature_two).view())[0] - label1 as f64;
+
+        true
+    }
+
+    pub fn _hueristic_2(&mut self, i2: usize, error_cache: &mut ArrayViewMut1<f64>) -> bool {
+        let label2 = self.support_labels[i2];
+        let alpha2 = self.alphas[i2];
+        let error2 = error_cache[i2];
+        let residual = error2 * label2 as f64;
+        let i1;
+        if ((residual < -self.kkt_value) && (alpha2 < self.C))
+            || ((residual > self.kkt_value) && (alpha2 > 0.0))
+        {
+            if self
+                .alphas
+                .iter()
+                .filter(|alpha| (**alpha != 0f64) && (**alpha != self.C))
+                .count()
+                > 1
+            {
+                if error_cache[i2] > 0f64 {
+                    i1 = argmin_1d_f64(error_cache.view());
+                } else {
+                    i1 = argmax_1d_f64(error_cache.view())
+                }
+                let flag = self.take_step(i1, i2, error_cache);
+                if flag {
+                    return flag;
+                }
+            }
+            let mut rng = rand::thread_rng();
+            let mut candidates = self
+                .alphas
+                .iter()
+                .enumerate()
+                .filter(|(_, alphas)| (**alphas != 0f64) && (**alphas != self.C))
+                .map(|(index, _)| index)
+                .collect::<Vec<usize>>();
+            candidates.shuffle(&mut rng);
+            for i1 in candidates {
+                let flag = self.take_step(i1, i2, error_cache);
+                if flag {
+                    return flag;
+                }
+            }
+            //if nothing works, restart
+            let random = rng.gen::<usize>();
+            return (random..self.alphas.len() + random)
+                .any(|x| self.take_step(x % random, i2, error_cache));
+        }
+        false
+    }
+
+    pub fn _binary_fit(&mut self, features: ArrayView2<f64>, labels: ArrayView1<i32>) {
+        let (nrows, ncols) = (features.nrows(), features.ncols());
+        self.support_vectors = features.to_owned();
+        self.support_labels = labels.to_owned();
+        self.alphas = Array1::from_elem(nrows, 0f64);
+        let mut error_cache =
+            self.predict_raw(self.support_vectors.view()) - self.support_labels.map(|x| *x as f64);
+        let mut count = 0;
+        let mut examined = true;
+        let mut trouble_no_op = 0;
+        while (count > 0) || examined {
+            count = 0;
+            if examined {
+                for i2 in 0..nrows {
+                    let flag = self._hueristic_2(i2, &mut error_cache.view_mut());
+                    count += flag as i32;
+                }
+            } else {
+                let candidates = self
+                    .alphas
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, x)| (**x != 0f64) && (**x != self.C))
+                    .map(|(index, _)| index)
+                    .collect::<Vec<usize>>();
+                if candidates.len() == 1 {
+                    trouble_no_op += 1;
+                    dbg!(&self.alphas);
+                    if trouble_no_op == 3 {
+                        break;
+                    }
+                }
+                for index in candidates {
+                    let flag = self._hueristic_2(index, &mut error_cache.view_mut());
+                    count += flag as i32;
+                }
+            }
+            if examined {
+                examined = false;
+            } else if count == 0 {
+                examined = true;
+            }
+        }
+        //shorten the support vector and support indices vectors by removing  those with 0 alpha values
         let support_indices = self
             .alphas
             .iter()
             .enumerate()
-            .filter(|(__, value)| **value != 0f64)
+            .filter(|(_, alpha)| **alpha != 0f64)
             .map(|(index, _)| index)
-            .collect::<Array1<usize>>();
-        support_labels = Array1::from_shape_fn(support_indices.len(), |x| {
+            .collect::<Vec<usize>>();
+        self.support_labels = Array1::from_shape_fn(support_indices.len(), |x| {
             self.support_labels[support_indices[x]]
         });
-        support_vectors = Array2::from_shape_fn(
-            (support_indices.len(), self.support_vectors.ncols()),
-            |(x, y)| self.support_vectors[(support_indices[x], y)],
-        );
-        alphas = Array1::from_shape_fn(support_indices.len(), |x| self.alphas[support_indices[x]]);
-        self.support_vectors = support_vectors;
-        self.bias = bias;
-        self.support_labels = support_labels.map(|x| x.to_i32().unwrap());
-        self.alphas = alphas;
+        self.support_vectors = Array2::from_shape_fn((support_indices.len(), ncols), |(x, y)| {
+            self.support_vectors[(support_indices[x], y)]
+        });
+        self.alphas =
+            Array1::from_shape_fn(support_indices.len(), |x| self.alphas[support_indices[x]]);
     }
+
     pub fn predict_raw(&self, input: ArrayView2<f64>) -> Array1<f64> {
-        let weights =
-            self.support_labels.map(|x| x.to_f64().unwrap()).to_owned() * self.alphas.view();
+        let weights = self.support_labels.map(|x| *x as f64).to_owned() * self.alphas.view();
         let distance = self.kernel_op_2d(self.support_vectors.view(), input);
-        weights.dot(&distance.view()) + self.bias
-    }
-
-    pub fn heuristic_1(&self, error_cache: ArrayView1<f64>, i2: isize) -> usize {
-        let e2 = error_cache[i2 as usize];
-        let non_bounded_indices = self
-            .alphas
-            .iter()
-            .enumerate()
-            .filter(|(_, value)| (0f64 < **value) && (**value < self.C))
-            .map(|(index, _)| index)
-            .collect::<Array1<usize>>();
-        let i1: usize;
-        if non_bounded_indices.len() > 0 {
-            let current = non_bounded_indices
-                .iter()
-                .map(|x| error_cache[*x])
-                .collect::<Array1<f64>>();
-            if e2 >= 0f64 {
-                i1 = argmax_1d_f64(current.view());
-            } else {
-                i1 = argmin_1d_f64(current.view());
-            }
-        } else {
-            i1 = argmax_1d_f64((error_cache.to_owned() - e2).map(|x| x.abs()).view());
-        }
-        i1
-    }
-
-    pub fn heuristic_2(&self, non_kkt_array: &mut Array1<usize>) -> isize {
-        let mut init_i2 = -1isize;
-        for elem in non_kkt_array.clone() {
-            non_kkt_array.remove_index(ndarray::Axis(0), elem);
-            if !self.check_kkt(elem) {
-                init_i2 = elem as isize;
-                break;
-            }
-        }
-        if init_i2 == -1 {
-            //all samples satisfy KKT conditions, so we build new kKT array
-            let indices = Array1::from_shape_fn(self.alphas.len(), |x| x);
-            let kkt_indexes = self.check_kkt_multi(indices.view());
-            let not_kkt_array = indices
-                .iter()
-                .filter(|x| !kkt_indexes[**x])
-                .map(|x| *x)
-                .collect::<Array1<usize>>();
-            if non_kkt_array.len() > 0 {
-                //TODO: shuffle
-                //still stuff to do
-                init_i2 = non_kkt_array[0] as isize;
-                *non_kkt_array = not_kkt_array.slice(ndarray::s![1..]).to_owned();
-            }
-        }
-        init_i2
-    }
-
-    pub fn check_kkt(&self, index: usize) -> bool {
-        let alpha_index = self.alphas[index];
-        let row = self.support_vectors.row(index);
-        let mut row_2d = Array2::zeros((1, row.len()));
-        row_2d.row_mut(0).assign(&row.view());
-        let score = self.predict_raw(row_2d.view());
-        let score = score[0];
-        let label_index = self.support_labels[index];
-        let residual = label_index as f64 * score - 1f64;
-        let condition_one = (alpha_index < self.C) && (residual < -self.kkt_value);
-        let condition_two = (alpha_index > 0f64) && (residual > self.kkt_value);
-        !(condition_one || condition_two)
-    }
-
-    fn check_kkt_multi(&self, indices: ArrayView1<usize>) -> Array1<bool> {
-        let alphas = Array1::from_shape_fn(indices.len(), |x| self.alphas[indices[x]]);
-        let array =
-            Array2::from_shape_fn((alphas.len(), self.support_vectors.ncols()), |(x, y)| {
-                self.support_vectors[(indices[x], y)]
-            });
-        let scores = self.predict_raw(array.view()).map(|x| x.to_f64().unwrap());
-        let label_indices = Array1::from_shape_fn(indices.len(), |x| {
-            self.support_labels[indices[x]].to_f64().unwrap()
-        });
-        let residuals = label_indices * scores - 1f64;
-        let condition_one = Array1::from_shape_fn(alphas.len(), |x| {
-            (alphas[x] < self.C) && (residuals[x] < -self.kkt_value)
-        });
-        let condition_two = Array1::from_shape_fn(alphas.len(), |x| {
-            (alphas[x] > 0f64) && (residuals[x] > self.kkt_value)
-        });
-        let res = Array1::from_shape_fn(alphas.len(), |x| !(condition_one[x] || condition_two[x]));
-        res
+        weights.dot(&distance.view()) - self.bias
     }
 
     pub fn compute_boundaries(
@@ -241,13 +290,6 @@ impl RawSVC {
         (lower_bound, upper_bound)
     }
 
-    pub fn compute_eta(&self, row_one: ArrayView1<f64>, row_two: ArrayView1<f64>) -> f64 {
-        let one = self.kernel_op_1d(row_one, row_one);
-        let two = self.kernel_op_1d(row_two, row_two);
-        let three = self.kernel_op_1d(row_one, row_two);
-        one + two - (three.powi(2))
-    }
-
     pub fn compute_b(
         &self,
         new_alpha_one: f64,
@@ -256,24 +298,18 @@ impl RawSVC {
         error_two: f64,
         i1: usize,
         i2: usize,
+        k11: f64,
+        k22: f64,
+        k12: f64,
     ) -> f64 {
-        let (feature_one, feature_two) =
-            (self.support_vectors.row(i1), self.support_vectors.row(i2));
         let b1 = self.bias
             - error_one
-            - self.support_labels[i1] as f64
-                * (new_alpha_one - self.alphas[i1])
-                * self.kernel_op_1d(feature_one, feature_one)
-            - self.support_labels[i2] as f64 * (new_alpha_two - self.alphas[i2])
-            - self.kernel_op_1d(feature_one, feature_one);
+            - self.support_labels[i1] as f64 * (new_alpha_one - self.alphas[i1]) * k11
+            - self.support_labels[i2] as f64 * (new_alpha_two - self.alphas[i2]) * k12;
         let b2 = self.bias
             - error_two
-            - self.support_labels[i1] as f64
-                * (new_alpha_one - self.alphas[i1])
-                * self.kernel_op_1d(feature_one, feature_two)
-            - self.support_labels[i2] as f64
-                * (new_alpha_two - self.alphas[i2])
-                * self.kernel_op_1d(feature_two, feature_two);
+            - self.support_labels[i1] as f64 * (new_alpha_one - self.alphas[i1]) * k12
+            - self.support_labels[i2] as f64 * (new_alpha_two - self.alphas[i2]) * k22;
         if (0f64 < new_alpha_one) && (new_alpha_one < self.C) {
             b1
         } else if (0f64 < new_alpha_two) && (new_alpha_two < self.C) {
@@ -293,6 +329,7 @@ impl RawSVC {
             SVMKernel::Sigmoid(coef_, alpha) => sigmoid_kernel_1d(row_one, row_two, coef_, alpha),
         }
     }
+
     pub fn kernel_op_2d(&self, row_one: ArrayView2<f64>, row_two: ArrayView2<f64>) -> Array2<f64> {
         match self.kernel {
             SVMKernel::RBF(gamma) => rbf_kernel_2d(row_one, row_two, gamma),
@@ -320,13 +357,27 @@ impl RawSVC {
             SVMKernel::Linear => linear_kernel_mixed(row_one, row_two),
         }
     }
+
+    pub fn objective_function(
+        &self,
+        alphas: ArrayView1<f64>,
+        target: ArrayView1<f64>,
+        input: ArrayView2<f64>,
+    ) -> f64 {
+        alphas.sum()
+            - (0.5
+                * outer_product(target, target)
+                * self.kernel_op_2d(input, input)
+                * outer_product(alphas, alphas))
+            .sum()
+    }
 }
 
 impl SVCBuilder {
     pub fn new() -> Self {
         Self {
             C: 0.0,
-            kkt_value: 1e-3,
+            kkt_value: 1e-2,
             kernel: SVMKernel::Linear,
             svms: vec![],
             strategy: TrainTestSplitStrategy::None,
@@ -417,8 +468,8 @@ impl SVCBuilder {
             estimator.kernel = self.kernel.clone();
             estimator.kkt_value = self.kkt_value;
             //train the estimator
-            let labels = labels.map(|x| if *x == 0 { 1i32 } else { -1i32 });
-            estimator.binomial_fit(features, labels.view(), 20);
+            let labels = labels.map(|x| if *x == 1 { 1i32 } else { -1i32 });
+            estimator._binary_fit(features, labels.view());
             self.svms.push(estimator);
         }
         if self.nclasses > 2 {
@@ -438,10 +489,9 @@ impl SVCBuilder {
                     let mut current_estimator = self.svms[class].clone();
                     let curr_ref = estimators.clone();
                     s.spawn_fifo(move |_| {
-                        let class = class;
                         let labels =
                             labels.map(|x| if *x as usize == class { 1i32 } else { -1i32 });
-                        current_estimator.binomial_fit(features, labels.view(), 20);
+                        current_estimator._binary_fit(features, labels.view());
                         let mut lock = curr_ref.write().unwrap();
                         lock[class] = current_estimator;
                         drop(lock);
@@ -504,6 +554,7 @@ mod tests {
     use super::*;
     use crate::utils::metrics::accuracy;
     use std::path::Path;
+
     #[test]
     fn test_convergence_svc_bi() {
         let dataset = BaseDataset::from_csv(
@@ -516,8 +567,8 @@ mod tests {
         let mut svc = SVCBuilder::new()
             .scaler(ScalerState::MinMax)
             .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7))
-            .kernel(SVMKernel::RBF(0.01))
-            .set_c(1f64);
+            .kernel(SVMKernel::RBF(1f64 / dataset.shape().1 as f64))
+            .set_c(1000f64);
         svc.fit(&dataset, "Outcome");
         let value = svc.evaluate(accuracy)[0];
         dbg!(value);
@@ -534,9 +585,9 @@ mod tests {
         let dataset = dataset.unwrap();
         let mut svc = SVCBuilder::new()
             .scaler(ScalerState::MinMax)
-            .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7))
-            .set_c(1f64)
-            .kernel(SVMKernel::RBF(0.01));
+            .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.9))
+            .set_c(1000f64)
+            .kernel(SVMKernel::RBF(1f64 / dataset.shape().1 as f64));
         svc.fit(&dataset, "species");
         let value = svc.evaluate(accuracy)[0];
         dbg!(value);

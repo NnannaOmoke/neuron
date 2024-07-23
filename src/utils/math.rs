@@ -1,8 +1,8 @@
-use naga::proc::{IndexableLength, IndexableLengthError};
-use ndarray::{Array1, Array2, ArrayView1, ArrayViewMut2};
-
 use super::*;
 use crate::*;
+use ndarray::{Array1, Array2, ArrayView1, ArrayViewMut1, ArrayViewMut2};
+use rand::prelude::ThreadRng;
+use rand::seq::SliceRandom;
 
 pub fn forward_elimination(array: &mut ArrayViewMut2<f64>) {
     let len = array.shape()[0];
@@ -108,15 +108,44 @@ pub fn argmin_1d_f64(vector: ArrayView1<f64>) -> usize {
     min
 }
 
+pub fn shuffle_1d<T: Clone>(vector: &mut Array1<T>) {
+    let mut holder = vector.clone().to_vec();
+    let mut rngs = rand::thread_rng();
+    holder.shuffle(&mut rngs);
+    *vector = Array1::from_vec(holder);
+}
+
+pub(crate) fn into_row_matrix<T: Float>(vector: ArrayView1<T>) -> Array2<T> {
+    Array2::from_shape_fn((vector.len(), 1), |(x, y)| vector[x])
+}
+
+pub(crate) fn into_column_matrix<T: Float>(vector: ArrayView1<T>) -> Array2<T> {
+    Array2::from_shape_fn((1, vector.len()), |(x, y)| vector[y])
+}
+
+pub fn outer_product<T: 'static + Float>(
+    input_one: ArrayView1<T>,
+    input_two: ArrayView1<T>,
+) -> Array2<T> {
+    into_row_matrix(input_one).dot(&into_column_matrix(input_two).view())
+}
+
 #[cfg(test)]
 mod tests {
     use ndarray::array;
 
-    use super::softmax_1d;
+    use super::*;
 
     #[test]
     fn test_softmax() {
         let array = array![3.0, 1.0, 0.2];
         dbg!(softmax_1d(array.view()));
+    }
+
+    #[test]
+    fn test_outer_mul() {
+        let one = array![0, 1, 2, 3, 4].map(|x| *x as f32);
+        let two = array![5, 6, 7, 8, 9].map(|x| *x as f32);
+        dbg!(outer_product(one.view(), two.view()));
     }
 }

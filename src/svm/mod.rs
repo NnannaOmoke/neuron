@@ -1,7 +1,8 @@
-use ndarray::{array, Array1, Array2, ArrayView1, ArrayView2};
+use crate::svm::svc::RawSVC;
+use crate::utils::math::outer_product;
+use ndarray::{array, linalg::Dot, Array1, Array2, ArrayView1, ArrayView2};
 use ndarray_linalg::{norm::Norm, opnorm::OperationNorm};
 use std::ops::Neg;
-
 pub mod svc;
 
 #[derive(Clone, Default, Debug)]
@@ -53,7 +54,7 @@ pub fn rbf_kernel_mixed(
     input_two: ArrayView2<f64>,
     gamma: f64,
 ) -> Array1<f64> {
-    let mut allocated = Array1::from_elem(input_two.len(), 0f64);
+    let mut allocated = Array1::from_elem(input_two.nrows(), 0f64);
     for (index, row) in input_two.rows().into_iter().enumerate() {
         let mut distance = row.to_owned() - input_one;
         distance.iter_mut().for_each(|x| *x = x.powi(2));
@@ -127,12 +128,27 @@ pub fn sigmoid_kernel_mixed(
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::math::into_column_matrix;
+
     use super::*;
 
     #[test]
     fn test_rbf_kernel() {
-        let first = array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
-        let second = array![[7.0, 8.0, 9.0], [7.0, 8.0, 9.0]];
-        dbg!(rbf_kernel_2d(first.view(), second.view(), 1.0));
+        let one_shot = Array1::linspace(10.0, 14.0, 4);
+        let support_vectors = array![
+            [0.0, 1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0, 7.0],
+            [8.0, 9.0, 10.0, 11.0],
+            [12.0, 13.0, 14.0, 15.0],
+            [16.0, 17.0, 18.0, 19.0]
+        ];
+        let result = rbf_kernel_mixed(one_shot.view(), support_vectors.view(), 0.001);
+        let result_two = rbf_kernel_2d(
+            into_column_matrix(one_shot.view()).view(),
+            support_vectors.view(),
+            0.001,
+        );
+        dbg!(result);
+        dbg!(result_two);
     }
 }
