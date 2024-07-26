@@ -20,6 +20,7 @@ use rand::Rng;
 use rayon::prelude::*;
 use std::sync::{Arc, RwLock};
 use std::{cell::RefCell, collections::HashSet};
+
 pub struct SVCBuilder {
     C: f64,
     kkt_value: f64,
@@ -61,7 +62,6 @@ impl RawSVC {
         if upper == lower {
             return false;
         }
-        dbg!(error1, error2);
         let k11 = self.kernel_op_1d(feature_one, feature_one);
         let k22 = self.kernel_op_1d(feature_two, feature_two);
         let k12 = self.kernel_op_1d(feature_one, feature_two);

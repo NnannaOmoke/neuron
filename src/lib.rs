@@ -9,10 +9,10 @@ pub mod dtype;
 pub mod gpu_accel;
 pub mod knn;
 pub mod linear_models;
+pub mod nb;
 pub mod svm;
 pub mod trees;
 pub mod utils;
-
 //All imports are defined here and made (pub)crate
 pub(crate) use core::{
     fmt,
