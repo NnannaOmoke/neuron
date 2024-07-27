@@ -4,6 +4,7 @@
 #![allow(suspicious_double_ref_op)]
 
 pub mod base_array;
+pub mod clustering;
 pub mod dtype;
 #[cfg(feature = "gpu_accel")]
 pub mod gpu_accel;
