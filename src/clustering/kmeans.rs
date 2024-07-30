@@ -39,7 +39,7 @@ impl KMeans {
         self.centroids = Self::lloyds_algorithm(self.train.view(), self.k, self.max_iters);
     }
 
-    fn lloyds_algorithm(features: ArrayView2<f64>, k: usize, max_iters: usize) -> Array2<f64> {
+    pub fn lloyds_algorithm(features: ArrayView2<f64>, k: usize, max_iters: usize) -> Array2<f64> {
         let init_centroids = Self::kmeans_plus_plus(features, k);
         let mut classes = Array1::from_elem(features.nrows(), 0);
         let mut centroids = Array2::from_elem((features.nrows(), k), 0f64);
@@ -91,7 +91,7 @@ impl KMeans {
         centroids
     }
 
-    fn kmeans_plus_plus(features: ArrayView2<f64>, k: usize) -> Array1<usize> {
+    pub fn kmeans_plus_plus(features: ArrayView2<f64>, k: usize) -> Array1<usize> {
         let mut rng = thread_rng();
         let choice = rng.gen_range(0..features.nrows());
         let mut res = Array1::from_elem(k, 0);
@@ -112,5 +112,17 @@ impl KMeans {
             res[centroid] = next;
         }
         res
+    }
+
+    pub fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
+        Array1::from_shape_fn(data.nrows(), |x| {
+            let distances = self
+                .centroids
+                .rows()
+                .into_iter()
+                .map(|row| Distance::Euclidean.distance(&row, &data.row(x)))
+                .collect::<Array1<f64>>();
+            argmin_1d_f64(distances.view()) as u32
+        })
     }
 }
