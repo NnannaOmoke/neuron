@@ -2,7 +2,7 @@ use core::{f64, num};
 use std::collections::HashMap;
 
 use naga::proc::index;
-use ndarray::{Array2, ArrayView1, ArrayView2};
+use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
 use crate::{
     base_array::BaseDataset,
@@ -199,5 +199,32 @@ impl RegressionTreeBuilder {
             threshold: f64::NAN,
             value,
         })
+    }
+    pub fn predict(&self, data: ArrayView2<f64>) -> Array1<f64> {
+        let mut array = Array1::<f64>::default(data.nrows());
+        let mut idx = 0usize;
+        match &self.root {
+            None => array,
+            Some(node) => {
+                for row in data.rows() {
+                    array[idx] = node.predict(row);
+                    idx += 1;
+                }
+                array
+            }
+        }
+    }
+}
+impl RegressionTreeNode {
+    fn predict(&self, data: ArrayView1<f64>) -> f64 {
+        if self.left.is_some() && self.right.is_some() {
+            if data[self.feature_idx] <= self.threshold {
+                self.left.as_ref().unwrap().predict(data)
+            } else {
+                self.left.as_ref().unwrap().predict(data)
+            }
+        } else {
+            self.value
+        }
     }
 }
