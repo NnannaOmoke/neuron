@@ -18,7 +18,7 @@ pub enum FillNAStrategy {
 #[derive(Clone)]
 pub struct BaseDataset {
     data: BaseMatrix,
-    column_names: Vec<String>,
+    pub(crate) column_names: Vec<String>,
 }
 
 impl BaseDataset {
@@ -590,6 +590,17 @@ impl BaseDataset {
                 .assign(&row_view.map(|x| x.to_f64().unwrap()).view());
         });
         data
+    }
+    pub(crate) fn get_first_nononetype(&self, col: &str) -> DType {
+        let index = self._get_string_index(col);
+        self.get_col(index)
+            .iter()
+            .find(|t| match t {
+                DType::None => false,
+                _ => true,
+            })
+            .unwrap()
+            .clone()
     }
 }
 
