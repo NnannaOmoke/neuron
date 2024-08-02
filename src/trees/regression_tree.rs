@@ -68,7 +68,7 @@ impl RegressionTreeBuilder {
         let mut left = Vec::<usize>::new();
         let mut right = Vec::<usize>::new();
         for row in indices {
-            if *dataset.get((0, feature_idx)).unwrap() <= threshold {
+            if *dataset.get((*row, feature_idx)).unwrap() <= threshold {
                 left.push(*row);
             } else {
                 right.push(*row);
@@ -169,7 +169,7 @@ impl RegressionTreeBuilder {
         self.strategy_data =
             TrainTestSplitStrategyData::<f64, f64>::new_r(dataset, self.target_col, self.strategy);
         let n = self.strategy_data.get_train().0.nrows();
-        self.build_internal(Vec::from_iter(0..n), 0);
+        self.root = Some(self.build_internal(Vec::from_iter(0..n), 0));
     }
     fn build_internal(
         &mut self,
@@ -235,6 +235,9 @@ impl RegressionTreeBuilder {
         let preds = self.predict(features);
         function(ground_truth, preds.view())
     }
+    fn display(&self) {
+        self.root.as_ref().unwrap().display(0);
+    }
 }
 impl RegressionTreeNode {
     fn predict(&self, data: ArrayView1<f64>) -> f64 {
@@ -242,10 +245,24 @@ impl RegressionTreeNode {
             if data[self.feature_idx] <= self.threshold {
                 self.left.as_ref().unwrap().predict(data)
             } else {
-                self.left.as_ref().unwrap().predict(data)
+                self.right.as_ref().unwrap().predict(data)
             }
         } else {
             self.value
+        }
+    }
+    fn display(&self, depth: usize) {
+        if self.left.is_some() && self.right.is_some() {
+            println!("{} feature: {} gain: {} threshold: {}", "  ".repeat(depth),
+                self.feature_idx,
+                self.gain,
+                self.threshold);
+            println!("{} left:", "  ".repeat(depth));
+            self.left.as_ref().unwrap().display(depth+1);
+            println!("{} right:", "  ".repeat(depth));
+            self.right.as_ref().unwrap().display(depth+1);
+        } else {
+            println!("{} value: {}", "  ".repeat(depth), self.value);
         }
     }
 }
@@ -269,7 +286,8 @@ mod tests {
         let mut tree =
             RegressionTreeBuilder::new().strategy(TrainTestSplitStrategy::TrainTest(0.7));
         tree.fit(&dataset, "MEDV");
-        let rmse = tree.evaluate(root_mean_square_error);
-        dbg!(rmse);
+        tree.display();
+        //let rmse = tree.evaluate(root_mean_square_error);
+        //dbg!(rmse);
     }
 }
