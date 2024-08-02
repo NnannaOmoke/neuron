@@ -102,8 +102,8 @@ pub fn argmax_1d_f64(vector: ArrayView1<f64>) -> usize {
 
 pub fn argmax_1d<T: PartialOrd>(vector: ArrayView1<T>) -> usize {
     let mut max = 0;
-    for (index, &elem) in vector.iter().enumerate() {
-        if elem >= vector[max] {
+    for (index, elem) in vector.iter().enumerate() {
+        if elem >= &vector[max] {
             max = index;
         }
     }
@@ -112,8 +112,8 @@ pub fn argmax_1d<T: PartialOrd>(vector: ArrayView1<T>) -> usize {
 
 pub fn argmin_1d<T: PartialOrd>(vector: ArrayView1<T>) -> usize {
     let mut min = 0;
-    for (index, &elem) in vector.iter().enumerate() {
-        if elem <= vector[min] {
+    for (index, elem) in vector.iter().enumerate() {
+        if elem <= &vector[min] {
             min = index;
         }
     }

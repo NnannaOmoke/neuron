@@ -55,6 +55,11 @@ impl ClassificationTreeBuilder {
             root: None,
         }
     }
+
+    pub fn strategy(self, strategy: TrainTestSplitStrategy) -> Self {
+        Self { strategy, ..self }
+    }
+
     fn split_data(
         &self,
         dataset: ArrayView2<f64>,
@@ -214,6 +219,24 @@ impl ClassificationTreeBuilder {
             }
         }
     }
+    pub fn evaluate<F>(&self, function: F) -> Vec<f64>
+    //using a vec because user evaluation functions might return maybe one value or three
+    //all the functions we plan to build in will only return one value, however
+    where
+        F: Fn(ArrayView1<u32>, ArrayView1<u32>) -> Vec<f64>,
+    {
+        let (features, ground_truth) = match self.strategy {
+            TrainTestSplitStrategy::None => {
+                //get train data
+                self.strategy_data.get_train()
+            }
+            TrainTestSplitStrategy::TrainTest(_) => self.strategy_data.get_test(),
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => self.strategy_data.get_eval(),
+        };
+        let preds = self.predict(features);
+        dbg!(&preds);
+        function(ground_truth, preds.view())
+    }
 }
 impl ClassificationTreeNode {
     fn predict(&self, data: ArrayView1<f64>) -> u32 {
@@ -226,5 +249,44 @@ impl ClassificationTreeNode {
         } else {
             self.value
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::base_array::BaseDataset;
+    use crate::utils::metrics::accuracy;
+    use std::path::Path;
+    #[test]
+    fn test_ctree_bi() {
+        let dataset = BaseDataset::from_csv(
+            Path::new("src/base_array/test_data/diabetes.csv"),
+            true,
+            true,
+            b',',
+        )
+        .unwrap();
+        let mut tree =
+            ClassificationTreeBuilder::new().strategy(TrainTestSplitStrategy::TrainTest(0.7));
+        tree.fit(&dataset, "Outcome");
+        let accuracy = tree.evaluate(accuracy);
+        dbg!(accuracy[0]);
+    }
+
+    #[test]
+    fn test_ctree_multi() {
+        let dataset = BaseDataset::from_csv(
+            Path::new("src/base_array/test_data/IRIS.csv"),
+            true,
+            true,
+            b',',
+        );
+        let dataset = dataset.unwrap();
+        let mut tree =
+            ClassificationTreeBuilder::new().strategy(TrainTestSplitStrategy::TrainTest(0.7));
+        tree.fit(&dataset, "species");
+        let accuracy = tree.evaluate(accuracy)[0];
+        dbg!(accuracy);
     }
 }

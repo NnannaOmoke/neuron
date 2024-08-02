@@ -11,9 +11,8 @@ pub fn get_dummies(
     exclude: &[&str],
     name: Option<fn(&[&str]) -> Vec<String>>,
 ) -> BaseDataset {
-    let excluded = exclude.iter().collect::<HashSet<_>>()
+    let excluded = exclude.iter().collect::<HashSet<_>>();
     let included = dataset.column_names.iter().collect::<HashSet<_>>();
     let targets = included.difference(&included).collect::<Vec<_>>();
     todo!();
-    
 }

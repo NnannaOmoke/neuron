@@ -55,6 +55,9 @@ impl RegressionTreeBuilder {
             root: None,
         }
     }
+    pub fn strategy(self, strategy: TrainTestSplitStrategy) -> Self {
+        Self { strategy, ..self }
+    }
     fn split_data(
         &self,
         dataset: ArrayView2<f64>,
@@ -214,6 +217,24 @@ impl RegressionTreeBuilder {
             }
         }
     }
+
+    pub fn evaluate<F>(&self, function: F) -> Vec<f64>
+    //using a vec because user evaluation functions might return maybe one value or three
+    //all the functions we plan to build in will only return one value, however
+    where
+        F: Fn(ArrayView1<f64>, ArrayView1<f64>) -> Vec<f64>,
+    {
+        let (features, ground_truth) = match self.strategy {
+            TrainTestSplitStrategy::None => {
+                //get train data
+                self.strategy_data.get_train()
+            }
+            TrainTestSplitStrategy::TrainTest(_) => self.strategy_data.get_test(),
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => self.strategy_data.get_eval(),
+        };
+        let preds = self.predict(features);
+        function(ground_truth, preds.view())
+    }
 }
 impl RegressionTreeNode {
     fn predict(&self, data: ArrayView1<f64>) -> f64 {
@@ -226,5 +247,29 @@ impl RegressionTreeNode {
         } else {
             self.value
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::base_array::BaseDataset;
+    use crate::utils::metrics::root_mean_square_error;
+    use crate::utils::model_selection::TrainTestSplitStrategy;
+    use std::path::Path;
+    #[test]
+    fn test_tree_r() {
+        let dataset = BaseDataset::from_csv(
+            Path::new("src/base_array/test_data/boston.csv"),
+            true,
+            true,
+            b',',
+        )
+        .unwrap();
+        let mut tree =
+            RegressionTreeBuilder::new().strategy(TrainTestSplitStrategy::TrainTest(0.7));
+        tree.fit(&dataset, "MEDV");
+        let rmse = tree.evaluate(root_mean_square_error);
+        dbg!(rmse);
     }
 }
