@@ -1,4 +1,4 @@
-use core::num;
+use core::{fmt, num};
 use std::collections::HashMap;
 
 use naga::proc::index;
@@ -70,7 +70,7 @@ impl ClassificationTreeBuilder {
         let mut left = Vec::<usize>::new();
         let mut right = Vec::<usize>::new();
         for row in indices {
-            if *dataset.get((0, feature_idx)).unwrap() <= threshold {
+            if *dataset.get((*row, feature_idx)).unwrap() <= threshold {
                 left.push(*row);
             } else {
                 right.push(*row);
@@ -171,7 +171,7 @@ impl ClassificationTreeBuilder {
         self.strategy_data =
             TrainTestSplitStrategyData::<f64, u32>::new_c(dataset, self.target_col, self.strategy);
         let n = self.strategy_data.get_train().0.nrows();
-        self.build_internal(Vec::from_iter(0..n), 0);
+        self.root = Some(self.build_internal(Vec::from_iter(0..n), 0));
     }
     fn build_internal(
         &mut self,
@@ -208,7 +208,7 @@ impl ClassificationTreeBuilder {
     pub fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
         let mut array = Array1::<u32>::default(data.nrows());
         let mut idx = 0usize;
-        match &self.root {
+            match &self.root {
             None => array,
             Some(node) => {
                 for row in data.rows() {
@@ -234,8 +234,11 @@ impl ClassificationTreeBuilder {
             TrainTestSplitStrategy::TrainTestEval(_, _, _) => self.strategy_data.get_eval(),
         };
         let preds = self.predict(features);
-        dbg!(&preds);
+            dbg!(&preds);
         function(ground_truth, preds.view())
+    }
+    fn display(&self) {
+        self.root.as_ref().unwrap().display(0);
     }
 }
 impl ClassificationTreeNode {
@@ -244,10 +247,24 @@ impl ClassificationTreeNode {
             if data[self.feature_idx] <= self.threshold {
                 self.left.as_ref().unwrap().predict(data)
             } else {
-                self.left.as_ref().unwrap().predict(data)
+                self.right.as_ref().unwrap().predict(data)
             }
         } else {
             self.value
+        }
+    }
+    fn display(&self, depth: usize) {
+        if self.left.is_some() && self.right.is_some() {
+            println!("{} feature: {} gain: {} threshold: {}", "  ".repeat(depth),
+                self.feature_idx,
+                self.gain,
+                self.threshold);
+            println!("{} left:", "  ".repeat(depth));
+            self.left.as_ref().unwrap().display(depth+1);
+            println!("{} right:", "  ".repeat(depth));
+            self.right.as_ref().unwrap().display(depth+1);
+        } else {
+            println!("{} value: {}", "  ".repeat(depth), self.value);
         }
     }
 }
@@ -270,6 +287,7 @@ mod tests {
         let mut tree =
             ClassificationTreeBuilder::new().strategy(TrainTestSplitStrategy::TrainTest(0.7));
         tree.fit(&dataset, "Outcome");
+        //tree.display();
         let accuracy = tree.evaluate(accuracy);
         dbg!(accuracy[0]);
     }
