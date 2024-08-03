@@ -1,5 +1,6 @@
 pub mod compute;
 pub mod context;
+pub mod quick;
 pub mod shaders;
 
 use std::{fmt::Debug, sync::Arc};
