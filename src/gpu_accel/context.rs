@@ -100,12 +100,12 @@ impl GpuContext {
 }
 
 pub struct WgpuPipelines {
-    dot_in_place: OnceLock<wgpu::ComputePipeline>,
-    dot_extern: OnceLock<wgpu::ComputePipeline>,
+    dot_in_place: wgpu::ComputePipeline,
+    dot_extern: wgpu::ComputePipeline,
 }
 
 impl WgpuPipelines {
-    pub fn init(&self, device: &wgpu::Device, shaders: &Shaders) {
+    pub fn new(device: &wgpu::Device, shaders: &Shaders) -> Self {
         const BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT: wgpu::BindGroupLayoutEntry =
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
@@ -137,7 +137,7 @@ impl WgpuPipelines {
             bind_group_layouts: &[&dot_in_place_bind_group_layout],
             push_constant_ranges: &[],
         });
-        let dot_in_place_pipeline =
+        let dot_in_place =
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some("Neuron dot-in-place pipeline"),
                 layout: Some(&dot_in_place_layout),
@@ -145,7 +145,6 @@ impl WgpuPipelines {
                 entry_point: &SHADER_MAIN_NAME,
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             });
-        self.dot_in_place.set(dot_in_place_pipeline).ok();
 
         let dot_extern_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -170,7 +169,7 @@ impl WgpuPipelines {
             bind_group_layouts: &[&dot_extern_bind_group_layout],
             push_constant_ranges: &[],
         });
-        let dot_extern_pipeline =
+        let dot_extern =
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some("Neuron dot-extern pipeline"),
                 layout: Some(&dot_extern_layout),
@@ -178,19 +177,10 @@ impl WgpuPipelines {
                 entry_point: &SHADER_MAIN_NAME,
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             });
-        self.dot_extern.set(dot_extern_pipeline).ok();
-    }
 
-    pub fn new(device: &wgpu::Device, shaders: &Shaders) -> Self {
-        let wgpu_pipelines = Self::new_uninit();
-        wgpu_pipelines.init(device, shaders);
-        wgpu_pipelines
-    }
-
-    pub fn new_uninit() -> Self {
         Self {
-            dot_in_place: OnceLock::new(),
-            dot_extern: OnceLock::new(),
+            dot_in_place,
+            dot_extern,
         }
     }
 }
