@@ -17,7 +17,8 @@ pub enum FillNAStrategy {
 #[repr(C)]
 #[derive(Clone)]
 pub struct BaseDataset {
-    data: BaseMatrix,
+    //TODO: find a suitable constructor for this, deprecate BaseMatrix
+    pub(crate) data: BaseMatrix,
     pub(crate) column_names: Vec<String>,
 }
 
@@ -212,7 +213,7 @@ impl BaseDataset {
         self.data.push_col(slice);
     }
     //iterator over column name, data pairs
-    pub fn items(&mut self) -> Zip<Iter<String>, base_array::ColumnIter> {
+    pub fn items(&self) -> Zip<Iter<String>, base_array::ColumnIter> {
         zip(self.column_names.iter(), self.data.cols())
     }
     //iterator over row-index, data pairs
@@ -540,6 +541,14 @@ impl BaseDataset {
                     .for_each(|x| *x = var.clone())
             }
         }
+    }
+
+    pub fn nrows(&self) -> usize {
+        self.data.data.nrows()
+    }
+
+    pub fn ncols(&self) -> usize {
+        self.data.data.ncols()
     }
 
     pub fn sort_by(&mut self, colname: &str) {

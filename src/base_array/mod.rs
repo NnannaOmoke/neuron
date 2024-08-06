@@ -15,7 +15,7 @@ pub(super) use base_dataset::BaseDataset;
 #[repr(C)]
 #[derive(Clone)]
 pub struct BaseMatrix {
-    data: Array2<DType>,
+    pub(crate) data: Array2<DType>,
 }
 
 impl BaseMatrix {
