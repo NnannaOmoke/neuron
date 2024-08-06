@@ -1,5 +1,5 @@
 use super::{
-    context::GpuContext,
+    context::{GpuContext, WgpuPipelines},
     shaders::{Shaders, SHADER_MAIN_NAME},
 };
 use std::{
@@ -10,7 +10,6 @@ use std::{
 
 pub struct ComputeContext<GpuContextPtr: Borrow<GpuContext>> {
     gpu_context: GpuContextPtr,
-    pipelines: WgpuPipelines,
 }
 
 impl<GpuContextPtr: Borrow<GpuContext>> ComputeContext<GpuContextPtr> {
@@ -103,102 +102,6 @@ where
 
     pub fn push_operation(&mut self, operation: Operation) {
         self.operations.push(operation);
-    }
-}
-
-pub struct WgpuPipelines {
-    dot_in_place: OnceLock<wgpu::ComputePipeline>,
-    dot_extern: OnceLock<wgpu::ComputePipeline>,
-}
-
-impl WgpuPipelines {
-    pub fn init(&self, device: &wgpu::Device, shaders: &Shaders) {
-        const BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT: wgpu::BindGroupLayoutEntry =
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            };
-
-        let dot_in_place_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Neuron dot-in-place binding layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                    },
-                ],
-            });
-        let dot_in_place_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Neuron dot-in-place layout"),
-            bind_group_layouts: &[&dot_in_place_bind_group_layout],
-            push_constant_ranges: &[],
-        });
-        let dot_in_place_pipeline =
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("Neuron dot-in-place pipeline"),
-                layout: Some(&dot_in_place_layout),
-                module: shaders.get_dot_in_place(device),
-                entry_point: &SHADER_MAIN_NAME,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            });
-        self.dot_in_place.set(dot_in_place_pipeline).ok();
-
-        let dot_extern_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Neuron dot-in-place binding layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                    },
-                ],
-            });
-        let dot_extern_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Neuron dot-in-place layout"),
-            bind_group_layouts: &[&dot_extern_bind_group_layout],
-            push_constant_ranges: &[],
-        });
-        let dot_extern_pipeline =
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("Neuron dot-extern pipeline"),
-                layout: Some(&dot_extern_layout),
-                module: shaders.get_dot_in_place(device),
-                entry_point: &SHADER_MAIN_NAME,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            });
-        self.dot_extern.set(dot_extern_pipeline).ok();
-    }
-
-    pub fn new(device: &wgpu::Device, shaders: &Shaders) -> Self {
-        let wgpu_pipelines = Self::new_uninit();
-        wgpu_pipelines.init(device, shaders);
-        wgpu_pipelines
-    }
-
-    pub fn new_uninit() -> Self {
-        Self {
-            dot_in_place: OnceLock::new(),
-            dot_extern: OnceLock::new(),
-        }
     }
 }
 
