@@ -1,17 +1,26 @@
 use super::shaders::init_dot_in_place;
 use ndarray::{ArrayView2, ArrayViewMut2};
 use std::{mem::size_of, sync::Arc};
+use thiserror::Error;
 use tokio::sync::Notify;
 use wgpu::util::DeviceExt;
 
-// TODO: Make functions gracefully handle errors.
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("matrices were not of the same dimentions")]
+    BadMatrixSizes,
+    #[error(transparent)]
+    BufferAsyncError(#[from] wgpu::BufferAsyncError),
+    #[error(transparent)]
+    TokioOneshotChannelReveiveError(#[from] tokio::sync::oneshot::error::RecvError),
+}
 
 async fn create_loaded_buffer(
     device: &wgpu::Device,
     data: &ArrayView2<'_, f32>,
     needs_cpy_src: bool,
     data_name: &str,
-) -> wgpu::Buffer {
+) -> Result<wgpu::Buffer, Error> {
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
         size: (data.len() * size_of::<f32>()) as wgpu::BufferAddress,
@@ -23,14 +32,14 @@ async fn create_loaded_buffer(
         mapped_at_creation: true,
     });
     let buffer_slice = buffer.slice(..);
-    let sender = Arc::new(Notify::new());
-    let receiver = sender.clone();
+    let (sender, receiver) = tokio::sync::oneshot::channel();
     buffer_slice.map_async(wgpu::MapMode::Write, move |r| {
-        r.expect("failed to map matmul target buffer for initialization");
-        sender.notify_waiters();
+        sender
+            .send(r)
+            .expect("failed to send buffer mapping result through channel")
     });
     device.poll(wgpu::Maintain::Poll);
-    receiver.notified().await;
+    receiver.await??;
     if let Some(data_slice) = data.as_slice() {
         buffer_slice
             .get_mapped_range_mut()
@@ -47,7 +56,8 @@ async fn create_loaded_buffer(
         }
     }
     buffer.unmap();
-    buffer
+
+    Ok(buffer)
 }
 
 async fn create_loaded_buffer_from_mut(
@@ -55,7 +65,7 @@ async fn create_loaded_buffer_from_mut(
     data: &ArrayViewMut2<'_, f32>,
     needs_cpy_src: bool,
     data_name: &str,
-) -> wgpu::Buffer {
+) -> Result<wgpu::Buffer, Error> {
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
         size: (data.len() * size_of::<f32>()) as wgpu::BufferAddress,
@@ -67,14 +77,14 @@ async fn create_loaded_buffer_from_mut(
         mapped_at_creation: true,
     });
     let buffer_slice = buffer.slice(..);
-    let sender = Arc::new(Notify::new());
-    let receiver = sender.clone();
+    let (sender, receiver) = tokio::sync::oneshot::channel();
     buffer_slice.map_async(wgpu::MapMode::Write, move |r| {
-        r.expect("failed to map matmul target buffer for initialization");
-        sender.notify_waiters();
+        sender
+            .send(r)
+            .expect("failed to send buffer mapping result through channel")
     });
     device.poll(wgpu::Maintain::Poll);
-    receiver.notified().await;
+    receiver.await??;
     if let Some(data_slice) = data.as_slice() {
         buffer_slice
             .get_mapped_range_mut()
@@ -91,10 +101,14 @@ async fn create_loaded_buffer_from_mut(
         }
     }
     buffer.unmap();
-    buffer
+
+    Ok(buffer)
 }
 
-pub async fn matmul32(mut target: ArrayViewMut2<'_, f32>, rhs: ArrayView2<'_, f32>) {
+pub async fn matmul32(
+    mut target: ArrayViewMut2<'_, f32>,
+    rhs: ArrayView2<'_, f32>,
+) -> Result<(), Error> {
     assert_eq!(target.dim(), rhs.dim());
 
     let dims = target.dim();
@@ -120,8 +134,9 @@ pub async fn matmul32(mut target: ArrayViewMut2<'_, f32>, rhs: ArrayView2<'_, f3
         .await
         .expect("could not get device from wgpu adapter");
 
-    let target_buffer = create_loaded_buffer_from_mut(&device, &target, true, "`matmul32` `target`").await;
-    let rhs_buffer = create_loaded_buffer(&device, &rhs, false, "`matmul32` `rhs`").await;
+    let target_buffer =
+        create_loaded_buffer_from_mut(&device, &target, true, "`matmul32` `target`").await?;
+    let rhs_buffer = create_loaded_buffer(&device, &rhs, false, "`matmul32` `rhs`").await?;
     let x_dim_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("neuron matmul32 input x dim buffer"),
         contents: bytemuck::bytes_of(&dims.0),
@@ -215,19 +230,27 @@ pub async fn matmul32(mut target: ArrayViewMut2<'_, f32>, rhs: ArrayView2<'_, f3
         compute_pass.set_bind_group(0, &bind_group, &[]);
         compute_pass.dispatch_workgroups(dims.0 as u32, dims.1 as u32, 0);
     }
-    command_encoder.copy_buffer_to_buffer(&target_buffer, 0, &output_staging_buffer, 0, target_buffer.size());
+    command_encoder.copy_buffer_to_buffer(
+        &target_buffer,
+        0,
+        &output_staging_buffer,
+        0,
+        target_buffer.size(),
+    );
     let submission_index = queue.submit([command_encoder.finish()]);
 
     let output_slice = output_staging_buffer.slice(..);
 
-    let sender = Arc::new(Notify::new());
-    let receiver = sender.clone();
+    let (sender, receiver) = tokio::sync::oneshot::channel();
     output_slice.map_async(wgpu::MapMode::Read, move |r| {
-        r.expect("failed to map matmul32 output staging buffer");
-        sender.notify_waiters();
+        sender
+            .send(r)
+            .expect("failed to send buffer mapping result through channel")
     });
-    device.poll(wgpu::Maintain::WaitForSubmissionIndex(submission_index)).panic_on_timeout();
-    receiver.notified().await;
+    device
+        .poll(wgpu::Maintain::WaitForSubmissionIndex(submission_index))
+        .panic_on_timeout();
+    receiver.await??;
 
     let mapped_range = output_slice.get_mapped_range();
     if let Some(mut_target_slice) = target.as_slice_mut() {
@@ -237,4 +260,6 @@ pub async fn matmul32(mut target: ArrayViewMut2<'_, f32>, rhs: ArrayView2<'_, f3
             *e = *bytemuck::from_bytes(&mapped_range[i..i + 4]);
         }
     }
+
+    Ok(())
 }
