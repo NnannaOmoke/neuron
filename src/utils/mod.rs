@@ -2,6 +2,7 @@ pub mod math;
 pub mod metrics;
 pub mod model_selection;
 pub mod scaler;
+pub mod text;
 
 use crate::base_array::BaseDataset;
 use crate::base_array::BaseMatrix;
