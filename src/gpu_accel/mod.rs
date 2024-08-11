@@ -2,6 +2,7 @@ pub mod compute;
 pub mod context;
 pub mod quick;
 pub mod shaders;
+pub mod utils;
 
 use std::{fmt::Debug, sync::Arc};
 // use thiserror::Error;
