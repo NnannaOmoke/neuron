@@ -515,20 +515,20 @@ impl TfIdfVectorizer {
         &self.vocabulary
     }
 
-    fn fit(&mut self, corpus: ArrayView1<&str>) {
+    pub fn fit(&mut self, corpus: ArrayView1<&str>) {
         let mut vectorizer = self.build_count_vectorizer();
         vectorizer.fit(corpus);
         self.vocabulary = vectorizer.vocabulary().clone();
     }
 
-    fn transform(&self, corpus: Array1<&str>) -> Array2<f64> {
+    pub fn transform(&self, corpus: Array1<&str>) -> Array2<f64> {
         let vectorizer = self.build_count_vectorizer();
         let intermediate = vectorizer.transform(corpus.view());
         let tftransformer = self.build_tfidf_transformer();
         tftransformer.transform(intermediate)
     }
 
-    fn fit_transform(&mut self, corpus: ArrayView1<&str>) -> Array2<f64> {
+    pub fn fit_transform(&mut self, corpus: ArrayView1<&str>) -> Array2<f64> {
         let mut vectorizer = self.build_count_vectorizer();
         let tftransformer = self.build_tfidf_transformer();
         let intermediate = vectorizer.fit_transform(corpus);
