@@ -14,7 +14,7 @@ pub enum FillNAStrategy {
 
 //this will be the dataset visible to the external users
 //we'll implement quite the number of methods for this, hopefully
-#[repr(C)]
+
 #[derive(Clone)]
 pub struct BaseDataset {
     //TODO: find a suitable constructor for this, deprecate BaseMatrix
@@ -466,9 +466,9 @@ impl BaseDataset {
         self._raw_col_drop(right_index)
     }
 
-    pub fn value_counts(&self, colname: &str) -> HashMap<&DType, usize> {
+    pub fn value_counts(&self, colname: &str) -> HashMap<DType, usize> {
         let index = self._get_string_index(colname);
-        let mappings = Counter::from_iter(self.get_col(index).into_iter());
+        let mappings = Counter::from_iter(self.get_col(index).to_owned().into_iter());
         mappings.into_map()
     }
 

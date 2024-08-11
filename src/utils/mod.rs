@@ -35,11 +35,11 @@ pub fn one_hot_encode(dataset: BaseDataset, exclude: &[&str]) -> BaseDataset {
             .into_iter()
             .enumerate()
             .for_each(|(index, value)| {
-                if value == value_counts[0] {
+                if value.clone() == value_counts[0] {
                 } else {
                     let pos = value_counts[1..]
                         .iter()
-                        .position(|current| value == *current)
+                        .position(|current| value.clone() == *current)
                         .unwrap();
                     zeros[(index, pos)] = dtype!(1);
                 }
@@ -54,7 +54,7 @@ pub fn one_hot_encode(dataset: BaseDataset, exclude: &[&str]) -> BaseDataset {
         value_counts[1..]
             .to_owned()
             .iter()
-            .map(|&x| x.to_string())
+            .map(|x| x.to_string())
             .collect()
     }
 
