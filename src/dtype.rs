@@ -970,32 +970,12 @@ macro_rules! dtype_arithmetic {
     };
 }
 
-#[macro_export]
-macro_rules! dtype {
-    ($($val: expr)?) => {
-        {
-            #[inline(always)]
-            fn is_string<T>(_x: &'static T) -> bool{
-                std::any::TypeId::of::<&'static str>() == std::any::TypeId::of::<T>()
-            }
-            $(
-                let is_string = is_string(&$val);
-                if is_string{
-                    DType::Object(Box::new($val.to_string()))
-                }
-                else{
-                    DType::parse_from_str(&stringify!($val), false)
-                }
-            )?
-        }
-    };
-}
-
 dtype_arithmetic!(u8, u16, u32, u64, u128, i8, i16, i32, i64, i128, f32, f64, usize, isize);
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::DType;
+    use neuron_macros::dtype;
 
     #[test]
     fn dtype_basic_arith_test() {

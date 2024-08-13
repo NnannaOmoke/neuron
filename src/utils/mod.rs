@@ -13,6 +13,8 @@ use num_traits::Zero;
 use std::collections::HashSet;
 use std::iter::zip;
 
+use neuron_macros::{dtype, internal_dtype};
+
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut2};
 
 //performs one hot encoding for a base_dataset
@@ -41,7 +43,7 @@ pub fn one_hot_encode(dataset: BaseDataset, exclude: &[&str]) -> BaseDataset {
                         .iter()
                         .position(|current| value.clone() == *current)
                         .unwrap();
-                    zeros[(index, pos)] = dtype!(1);
+                    zeros[(index, pos)] = internal_dtype!(1);
                 }
             });
         //write the zeros to the array

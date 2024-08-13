@@ -6,3 +6,4 @@
 *rustfmt.toml
 *.rep
 *.gpr
+/neuron-macros/target

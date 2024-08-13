@@ -37,5 +37,10 @@ petal-neighbors = "0.10.0"
 kdtree = "0.7.0"
 phf = {version = "0.11.2", features = ["macros"]}
 indexmap = "2.3.0"
+neuron-macros = {path = "neuron-macros"}
 [dev-dependencies]
 criterion = "0.3"
+
+
+[workspace]
+members = ["neuron-macros"]

@@ -45,5 +45,3 @@ pub(crate) use std::{
     vec,
 };
 pub(crate) use thiserror::Error;
-
-fn test_something() {}
