@@ -8,17 +8,17 @@ pub fn dtype(input: TokenStream) -> TokenStream {
     let dtype = match input {
         Lit::Str(val) => {
             quote! {
-                ::neuron::DType::Object(Box::new(#val.to_string()))
+                ::neuron::dtype::DType::Object(Box::new(#val.to_string()))
             }
         }
         Lit::ByteStr(val) => {
             quote! {
-                ::neuron::DType::Object(Box::new(::std::string::String::from_utf8(#val)))
+                ::neuron::dtype::DType::Object(Box::new(::std::string::String::from_utf8(#val)))
             }
         }
         Lit::Char(val) => {
             quote! {
-                ::neuron::DType::Object(Box::new(::std::string::String::from(#val)))
+                ::neuron::dtype::DType::Object(Box::new(::std::string::String::from(#val)))
             }
         }
         Lit::Int(val) => {
@@ -26,11 +26,11 @@ pub fn dtype(input: TokenStream) -> TokenStream {
             let value = val.base10_parse::<i64>().unwrap();
             if value < 0 {
                 quote! {
-                    ::neuron::DType::F64(#value as f64)
+                    ::neuron::dtype::DType::F64(#value as f64)
                 }
             } else {
                 quote! {
-                    ::neuron::DType::U64(#value as u64)
+                    ::neuron::dtype::DType::U64(#value as u64)
                 }
             }
         }
@@ -39,7 +39,7 @@ pub fn dtype(input: TokenStream) -> TokenStream {
             let val = val.base10_parse::<f64>().unwrap();
             if val.is_normal() {
                 quote! {
-                    ::neuron::dtype::DType::F64(val)
+                    ::neuron::dtype::DType::F64(#val)
                 }
             } else {
                 quote! {
@@ -49,7 +49,7 @@ pub fn dtype(input: TokenStream) -> TokenStream {
         }
         Lit::Bool(val) => {
             quote! {
-                ::neuron::dtype::DType::U32(#val.value() as u32)
+                ::neuron::dtype::DType::U32(#val as u32)
             }
         }
         _ => quote! {::neuron::dtype::DType::None},
@@ -104,7 +104,7 @@ pub fn internal_dtype(input: TokenStream) -> TokenStream {
         }
         Lit::Bool(val) => {
             quote! {
-                DType::U32(#val.value() as u32)
+                DType::U32(#val as u32)
             }
         }
         _ => quote! {DType::None},
