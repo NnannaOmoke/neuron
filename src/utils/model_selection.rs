@@ -9,7 +9,7 @@ use ndarray::{Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMu
 use num_traits::{ToPrimitive, Zero};
 use rand::{distributions::Distribution, distributions::Uniform, prelude::SliceRandom, thread_rng};
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub enum TrainTestSplitStrategy {
     #[default]
     None,

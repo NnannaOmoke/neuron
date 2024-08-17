@@ -74,7 +74,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     };
 
     let mut vec_takers = vec![];
-    let better = fields
+    let mut better = fields
         .iter()
         .map(|f| {
             let n = &f.ident;
@@ -92,6 +92,14 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
         })
         .collect::<Vec<_>>();
+    better.push(quote! {
+       best_estimator: Option<#name>,
+        results: Option<::std::vec::Vec<(::std::string::String, f64)>>
+    });
+    let len = vec_takers.len();
+    if len == 0 {
+        panic!("No field can be cross-validated");
+    }
     let methods = vec_takers.iter().map(|f| {
         let n = &f.ident;
         let ty = &f.ty;
@@ -103,7 +111,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
         }
     });
-    let into_validator_iterator = fields
+    let mut into_validator_iterator = fields
         .iter()
         .map(|f| {
             let n = &f.ident;
@@ -119,6 +127,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
         })
         .collect::<Vec<_>>();
+    into_validator_iterator.push(quote! {
+       best_estimator: None,
+        results: None,
+    });
     let into_validator = quote! {
         //firstly we want to make a fn called into validator with signature
         pub fn into_validator(self) -> #validator_ident{
@@ -129,8 +141,52 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
         }
     };
-    let res = quote! {
+    let struct_cross_val_gen = fields
+        .iter()
+        .map(|f| {
+            let n = &f.ident;
+            for attr in &f.attrs {
+                if attr.path().get_ident().unwrap() == &Ident::new("validate", name.span()) {
+                    return quote! {
+                        #n: #n.clone()
+                    };
+                }
+            }
+            quote! {
+                #n: self.#n.clone()
+            }
+        })
+        .collect::<Vec<_>>();
 
+    let multiple_fors =
+        vec_takers
+            .iter()
+            .enumerate()
+            .rev()
+            .fold(quote!(), |accum, (index, field)| {
+                let ident = field.ident.clone().unwrap();
+                if index == len - 1 {
+                    quote! {
+                        for #ident in &self.#ident{
+                            let current = #name{
+                                #(#struct_cross_val_gen),*
+                            };
+                            container.push(current);
+
+                        }
+                    }
+                } else {
+                    quote! {
+                        for #ident in &self.#ident{
+                            #accum
+                        }
+                    }
+                }
+            });
+    let res = quote! {
+        use rayon::iter::ParallelIterator;
+        use rayon::iter::IndexedParallelIterator;
+        use rayon::iter::IntoParallelRefMutIterator;
         impl #name{
             #into_validator
         }
@@ -144,10 +200,32 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
             //now we write the fit method
             //this time, fit WILL consume the basedataset
-            pub fn fit(dataset: ::neuron::base_array::BaseDataset, target: &str, evaluation: fn(::ndarray::Array1<f64>, ::ndarray::Array1<f64>) -> std::vec::Vec<f64>, reverse: bool){
+            pub fn fit(&mut self, dataset: ::neuron::base_array::BaseDataset, target: &str, evaluation: fn(::ndarray::ArrayView1<f64>, ::ndarray::ArrayView1<f64>) -> std::vec::Vec<f64>, reverse: bool){
                 //so basically we want to make multiple copies of the estimators, which means another traipsing of the fields
-
-
+                let mut container = ::std::vec![];
+                #multiple_fors
+                let indices = ::std::sync::Arc::new(::std::sync::RwLock::new(::std::vec::Vec::from_iter((0 .. container.len()).map(|_| 0f64))));
+                container.par_iter_mut().enumerate().for_each(|(index, estimator)| {
+                    estimator.fit(&dataset, target);
+                    let result = estimator.evaluate(evaluation);
+                    if result.len() == 1{
+                        let lock = indices.clone();
+                        let mut lock = lock.write().unwrap();
+                        lock[index] = result[0];
+                    } else {
+                        unimplemented!()
+                    }
+                });
+                let results = ::std::sync::Arc::into_inner(indices).unwrap().into_inner().unwrap();
+                let mut indices = (0 .. container.len()).collect::<Vec<usize>>();
+                indices.sort_by(|v1, v2| f64::total_cmp(&results[*v2], &results[*v1]));
+                if reverse{
+                    self.best_estimator = Some(container[indices[container.len() - 1]].clone());
+                } else{
+                    self.best_estimator = Some(container[indices[0]].clone());
+                }
+                let results = zip(container, results).map(|(model, score)| (model.to_string(), score)).collect::<Vec<(String, f64)>>();
+                self.results = Some(results);
             }
         }
     };

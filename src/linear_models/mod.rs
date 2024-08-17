@@ -19,7 +19,7 @@ mod logistic_regression;
 pub(super) use linear_regression::LinearRegressorBuilder;
 pub(super) use logistic_regression::LogisticRegressorBuilder;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum LinearRegularizer {
     None,
     Ridge(f64),

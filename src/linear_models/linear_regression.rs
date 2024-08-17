@@ -24,13 +24,18 @@ use crate::{
     *,
 };
 
+use neuron_macros::CrossValidator;
+
+#[derive(CrossValidator, Clone)]
 pub struct LinearRegressorBuilder {
     weights: Vec<f64>,
     bias: f64,
+    #[validate]
     scaler: ScalerState,
     strategy: TrainTestSplitStrategy,
     strategy_data: TrainTestSplitStrategyData<f64, f64>,
     target_col: usize,
+    #[validate]
     regularizer: LinearRegularizer,
     include_bias: bool,
 }
@@ -140,6 +145,16 @@ impl LinearRegressorBuilder {
         };
         let preds = self.predict(features);
         function(ground_truth, preds.view())
+    }
+}
+
+impl Display for LinearRegressorBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "[{:?}, {:?}, {:?}, {:?}, {:?}]",
+            &self.scaler, &self.strategy, &self.regularizer, &self.weights, &self.bias
+        )
     }
 }
 

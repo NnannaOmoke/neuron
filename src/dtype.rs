@@ -975,7 +975,7 @@ dtype_arithmetic!(u8, u16, u32, u64, u128, i8, i16, i32, i64, i128, f32, f64, us
 #[cfg(test)]
 mod tests {
     use super::DType;
-    use neuron_macros::internal_dtype;
+    use neuron_macros::dtype;
 
     #[test]
     fn dtype_basic_arith_test() {
@@ -987,9 +987,9 @@ mod tests {
 
     #[test]
     fn dtype_macro() {
-        let init = internal_dtype!("459");
-        let number = internal_dtype!(500.0);
-        let bool = internal_dtype!(false);
+        let init = dtype!("459");
+        let number = dtype!(500.0);
+        let bool = dtype!(false);
         assert_eq!(DType::U32(0), bool);
         assert_eq!(DType::F64(500.0), number);
         assert_eq!(DType::Object(Box::new(String::from("459"))), init);
@@ -998,7 +998,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn none_type_test() {
-        let string_val = internal_dtype!("Gello");
+        let string_val = dtype!("Gello");
         let _ = string_val * 100;
     }
 }
