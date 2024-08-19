@@ -38,6 +38,7 @@ kdtree = "0.7.0"
 phf = {version = "0.11.2", features = ["macros"]}
 indexmap = "2.3.0"
 neuron-macros = {path = "neuron-macros"}
+lru = "0.12.4"
 [dev-dependencies]
 criterion = "0.3"
 

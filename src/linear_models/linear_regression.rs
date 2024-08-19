@@ -103,16 +103,44 @@ impl LinearRegressorBuilder {
         self.internal_fit();
     }
 
-    fn internal_fit(&mut self) {
-        if self.include_bias {
-            self.strategy_data
-                .train_features
-                .push_column(Array1::ones(self.strategy_data.train_features.nrows()).view())
-                .unwrap();
-        }
-        let (features, target) = self.strategy_data.get_train();
+    pub fn fit_from_tts_data(&mut self, data: &TrainTestSplitStrategyData<f64, f64>) {
+        let (features, target) = data.get_train();
         let weights = match self.regularizer {
-            LinearRegularizer::None => non_regularizing_fit(features.view(), target),
+            LinearRegularizer::None => non_regularizing_fit(features, target),
+            LinearRegularizer::Ridge(var) => ridge_regularizing_fit(features, target, var),
+            LinearRegularizer::Lasso(var, iters) => {
+                _coordinate_descent(features, target, var, None, iters)
+            }
+            LinearRegularizer::ElasticNet(l1, l2, iters) => {
+                _coordinate_descent(features, target, l1, Some(l2), iters)
+            }
+        };
+        if self.include_bias {
+            self.weights = weights.to_vec()[..weights.len() - 1].to_vec();
+            self.bias = *weights.last().unwrap();
+        } else {
+            self.weights = weights.to_vec();
+        }
+    }
+
+    fn internal_fit(&mut self) {
+        let (features, target) = self.strategy_data.get_train();
+        let f = if self.include_bias {
+            let mut features = features.to_owned();
+            features
+                .push_column(Array1::ones(features.nrows()).view())
+                .unwrap();
+            features
+        } else {
+            Array2::default((0, 0))
+        };
+        let features = if self.include_bias {
+            f.view()
+        } else {
+            features
+        };
+        let weights = match self.regularizer {
+            LinearRegularizer::None => non_regularizing_fit(features, target),
             LinearRegularizer::Ridge(var) => ridge_regularizing_fit(features, target, var),
             LinearRegularizer::Lasso(var, iters) => {
                 _coordinate_descent(features, target, var, None, iters)

@@ -1,9 +1,10 @@
 use crate::{
     base_array::BaseDataset,
     svm::{
-        linear_kernel_1d, linear_kernel_2d, linear_kernel_mixed, polynomial_kernel_1d,
-        polynomial_kernel_2d, polynomial_kernel_mixed, rbf_kernel_1d, rbf_kernel_2d,
-        rbf_kernel_mixed, sigmoid_kernel_1d, sigmoid_kernel_2d, sigmoid_kernel_mixed, SVMKernel,
+        kernel_cache::IndexPair, kernel_cache::KernelCache, linear_kernel_1d, linear_kernel_2d,
+        linear_kernel_mixed, polynomial_kernel_1d, polynomial_kernel_2d, polynomial_kernel_mixed,
+        rbf_kernel_1d, rbf_kernel_2d, rbf_kernel_mixed, sigmoid_kernel_1d, sigmoid_kernel_2d,
+        sigmoid_kernel_mixed, SVMKernel,
     },
     utils::model_selection::{TrainTestSplitStrategy, TrainTestSplitStrategyData},
     utils::{
@@ -65,10 +66,10 @@ impl RawSVC {
         let k11 = self.kernel_op_1d(feature_one, feature_one);
         let k22 = self.kernel_op_1d(feature_two, feature_two);
         let k12 = self.kernel_op_1d(feature_one, feature_two);
-        let eta = k11 + k22 - (k12 * 2f64);
+        let eta = 2f64 * k12 - k11 - k22;
         let mut alpha_two_new;
-        if eta > 0f64 {
-            alpha_two_new = alpha_two + (label2 as f64 * (error1 - error2) / eta);
+        if eta < 0f64 {
+            alpha_two_new = alpha_two - ((label2 as f64 * (error1 - error2)) / eta);
             alpha_two_new = if alpha_two_new >= upper {
                 upper
             } else if (lower < alpha_two_new) && (alpha_two_new < upper) {
@@ -98,18 +99,19 @@ impl RawSVC {
                 alpha_two_new = alpha_two;
             }
         }
+        if alpha_two_new < 1e-9 {
+            alpha_two_new = 0f64
+        } else if alpha_two_new > (self.C - 1e-9) {
+            alpha_two_new = self.C
+        }
 
-        // if alpha_two_new < 1e-9 {
-        //     alpha_two_new = 0f64;
-        // } else if alpha_two_new > (self.C - 1e-9) {
-        //     alpha_two_new = self.C;
-        // }
         if (alpha_two_new - alpha_two).abs()
-            < self.kkt_value * (alpha_one + alpha_two_new + self.kkt_value)
+            < self.kkt_value * (alpha_two + alpha_two_new + self.kkt_value)
         {
             return false;
         }
-        let alpha_one_new = alpha_one + s as f64 * (alpha_two_new - alpha_two);
+        let alpha_one_new = alpha_one + s as f64 * (alpha_two - alpha_two_new);
+
         let bias = self.compute_b(
             alpha_one_new,
             alpha_two_new,
@@ -131,19 +133,32 @@ impl RawSVC {
             error_cache[i1] = 0.0;
         }
         let non_optimized = (0..self.support_vectors.nrows())
-            .filter(|x| *x != i1 && *x != i2)
+            .filter(|&x| x != i1 && x != i2)
             .collect::<Vec<usize>>();
         //TODO: parallel iterators here; computing these kernels are EXTREMELY EXPENSIVE
-        non_optimized.iter().for_each(|x| {
-            error_cache[*x] = error_cache[*x]
-                + label1 as f64
-                    * (alpha_one_new - alpha_one)
-                    * self.kernel_op_1d(self.support_vectors.row(i1), self.support_vectors.row(*x))
+        non_optimized.iter().for_each(|&x| {
+            let val = label1 as f64
+                * (alpha_one_new - alpha_one)
+                * self.kernel_op_1d(self.support_vectors.row(i1), self.support_vectors.row(x))
                 + label2 as f64
                     * (alpha_two_new - alpha_two)
-                    * self.kernel_op_1d(self.support_vectors.row(i2), self.support_vectors.row(*x))
-                + self.bias
-                - bias;
+                    * self.kernel_op_1d(self.support_vectors.row(i2), self.support_vectors.row(x))
+                + (self.bias - bias);
+            // if val > 50f64 {
+            //     dbg!(i1);
+            //     dbg!(i2);
+            //     dbg!(alpha_one_new);
+            //     dbg!(alpha_two_new);
+            //     dbg!(alpha_one);
+            //     dbg!(alpha_two);
+            //     dbg!(self.bias);
+            //     dbg!(bias);
+            //     dbg!(k11);
+            //     dbg!(k22);
+            //     dbg!(k12);
+            //     panic!("Generated error passed 10, error: {}", val);
+            //}
+            error_cache[x] += val;
         });
         self.bias = bias;
 
@@ -171,7 +186,7 @@ impl RawSVC {
                 .count()
                 > 1
             {
-                if error_cache[i2] > 0f64 {
+                if error2 > 0f64 {
                     i1 = argmin_1d_f64(error_cache.view());
                 } else {
                     i1 = argmax_1d_f64(error_cache.view())
@@ -186,7 +201,7 @@ impl RawSVC {
                 .alphas
                 .iter()
                 .enumerate()
-                .filter(|(_, alphas)| (**alphas != 0f64) && (**alphas != self.C))
+                .filter(|(_, &alphas)| (0f64 < alphas) && (alphas < self.C))
                 .map(|(index, _)| index)
                 .collect::<Vec<usize>>();
             candidates.shuffle(&mut rng);
@@ -213,7 +228,6 @@ impl RawSVC {
             self.predict_raw(self.support_vectors.view()) - self.support_labels.map(|x| *x as f64);
         let mut count = 0;
         let mut examined = true;
-        let mut trouble_no_op = 0;
         while (count > 0) || examined {
             count = 0;
             if examined {
@@ -226,16 +240,9 @@ impl RawSVC {
                     .alphas
                     .iter()
                     .enumerate()
-                    .filter(|(_, x)| (**x != 0f64) && (**x != self.C))
+                    .filter(|(_, &x)| (x < 0f64) && (x < self.C))
                     .map(|(index, _)| index)
                     .collect::<Vec<usize>>();
-                if candidates.len() == 1 {
-                    trouble_no_op += 1;
-                    dbg!(&self.alphas);
-                    if trouble_no_op == 3 {
-                        break;
-                    }
-                }
                 for index in candidates {
                     let flag = self._hueristic_2(index, &mut error_cache.view_mut());
                     count += flag as i32;
@@ -266,7 +273,7 @@ impl RawSVC {
     }
 
     pub fn predict_raw(&self, input: ArrayView2<f64>) -> Array1<f64> {
-        let weights = self.support_labels.map(|x| *x as f64).to_owned() * self.alphas.view();
+        let weights = self.alphas.view().to_owned() * self.support_labels.map(|x| *x as f64);
         let distance = self.kernel_op_2d(self.support_vectors.view(), input);
         weights.dot(&distance.view()) - self.bias
     }
@@ -281,7 +288,7 @@ impl RawSVC {
         let lower_bound: f64;
         let upper_bound: f64;
         if label_one == label_two {
-            lower_bound = 0f64.max(alpha_one + alpha_two - self.C);
+            lower_bound = 0f64.max((alpha_one + alpha_two) - self.C);
             upper_bound = self.C.min(alpha_one + alpha_two);
         } else {
             lower_bound = 0f64.max(alpha_two - alpha_one);
@@ -303,13 +310,13 @@ impl RawSVC {
         k12: f64,
     ) -> f64 {
         let b1 = self.bias
-            - error_one
-            - self.support_labels[i1] as f64 * (new_alpha_one - self.alphas[i1]) * k11
-            - self.support_labels[i2] as f64 * (new_alpha_two - self.alphas[i2]) * k12;
+            + error_one
+            + self.support_labels[i1] as f64 * (new_alpha_one - self.alphas[i1]) * k11
+            + self.support_labels[i2] as f64 * (new_alpha_two - self.alphas[i2]) * k12;
         let b2 = self.bias
-            - error_two
-            - self.support_labels[i1] as f64 * (new_alpha_one - self.alphas[i1]) * k12
-            - self.support_labels[i2] as f64 * (new_alpha_two - self.alphas[i2]) * k22;
+            + error_two
+            + self.support_labels[i1] as f64 * (new_alpha_one - self.alphas[i1]) * k12
+            + self.support_labels[i2] as f64 * (new_alpha_two - self.alphas[i2]) * k22;
         if (0f64 < new_alpha_one) && (new_alpha_one < self.C) {
             b1
         } else if (0f64 < new_alpha_two) && (new_alpha_two < self.C) {
@@ -356,6 +363,10 @@ impl RawSVC {
             }
             SVMKernel::Linear => linear_kernel_mixed(row_one, row_two),
         }
+    }
+
+    pub(crate) fn kernel_op_helper(&self, i1: usize, i2: usize) -> f64 {
+        self.kernel_op_1d(self.support_vectors.row(i1), self.support_vectors.row(i2))
     }
 
     pub fn objective_function(
@@ -492,6 +503,7 @@ impl SVCBuilder {
                         let labels =
                             labels.map(|x| if *x as usize == class { 1i32 } else { -1i32 });
                         current_estimator._binary_fit(features, labels.view());
+                        dbg!("This done, {} class", class);
                         let mut lock = curr_ref.write().unwrap();
                         lock[class] = current_estimator;
                         drop(lock);
@@ -525,6 +537,7 @@ impl SVCBuilder {
     pub fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
         if self.nclasses == 2 {
             let scores = self.predict_scores_one_class(data);
+            dbg!(scores.view());
             scores.map(|x| if *x >= 0f64 { 1 } else { 0 })
         } else {
             let scores = self.predict_scores_multi_class(data);
@@ -565,10 +578,10 @@ mod tests {
         );
         let dataset = dataset.unwrap();
         let mut svc = SVCBuilder::new()
-            .scaler(ScalerState::MinMax)
+            .scaler(ScalerState::ZScore)
             .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7))
-            .kernel(SVMKernel::RBF(1f64 / dataset.shape().1 as f64))
-            .set_c(1000f64);
+            .kernel(SVMKernel::Linear)
+            .set_c(1f64);
         svc.fit(&dataset, "Outcome");
         let value = svc.evaluate(accuracy)[0];
         dbg!(value);
@@ -584,10 +597,10 @@ mod tests {
         );
         let dataset = dataset.unwrap();
         let mut svc = SVCBuilder::new()
-            .scaler(ScalerState::MinMax)
+            .scaler(ScalerState::ZScore)
             .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.9))
-            .set_c(1000f64)
-            .kernel(SVMKernel::RBF(1f64 / dataset.shape().1 as f64));
+            .set_c(1f64)
+            .kernel(SVMKernel::Linear);
         svc.fit(&dataset, "species");
         let value = svc.evaluate(accuracy)[0];
         dbg!(value);

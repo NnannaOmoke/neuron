@@ -3,6 +3,7 @@ use crate::utils::math::outer_product;
 use ndarray::{array, linalg::Dot, Array1, Array2, ArrayView1, ArrayView2};
 use ndarray_linalg::{norm::Norm, opnorm::OperationNorm};
 use std::ops::Neg;
+pub mod kernel_cache;
 pub mod svc;
 
 #[derive(Clone, Default, Debug)]
@@ -150,5 +151,18 @@ mod tests {
         );
         dbg!(result);
         dbg!(result_two);
+    }
+    #[test]
+    fn test_commutative() {
+        let first = Array1::range(0f64, 12f64, 1f64);
+        let second = Array1::range(100f64, 112f64, 1f64);
+        assert_eq!(
+            rbf_kernel_1d(first.view(), second.view(), 1f64),
+            rbf_kernel_1d(second.view(), first.view(), 1f64)
+        );
+        assert_eq!(
+            linear_kernel_1d(first.view(), second.view()),
+            linear_kernel_1d(second.view(), first.view())
+        );
     }
 }
