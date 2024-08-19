@@ -5,6 +5,7 @@
 
 pub mod base_array;
 pub mod clustering;
+pub mod decomposition;
 pub mod dtype;
 #[cfg(feature = "gpu_accel")]
 pub mod gpu_accel;

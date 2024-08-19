@@ -46,7 +46,13 @@ pub(crate) struct RawSVC {
 }
 
 impl RawSVC {
-    fn take_step(&mut self, i1: usize, i2: usize, error_cache: &mut ArrayViewMut1<f64>) -> bool {
+    fn take_step(
+        &mut self,
+        i1: usize,
+        i2: usize,
+        error_cache: &mut ArrayViewMut1<f64>,
+        cache: &mut KernelCache,
+    ) -> bool {
         if i1 == i2 {
             return false;
         }
@@ -63,9 +69,12 @@ impl RawSVC {
         if upper == lower {
             return false;
         }
-        let k11 = self.kernel_op_1d(feature_one, feature_one);
-        let k22 = self.kernel_op_1d(feature_two, feature_two);
-        let k12 = self.kernel_op_1d(feature_one, feature_two);
+        // let k11 = self.kernel_op_1d(feature_one, feature_one);
+        let k11 = cache.get([i1, i1].into(), self);
+        // let k22 = self.kernel_op_1d(feature_two, feature_two);
+        let k22 = cache.get([i2, i2].into(), self);
+        // let k12 = self.kernel_op_1d(feature_one, feature_two);
+        let k12 = cache.get([i1, i2].into(), self);
         let eta = 2f64 * k12 - k11 - k22;
         let mut alpha_two_new;
         if eta < 0f64 {
@@ -135,42 +144,29 @@ impl RawSVC {
         let non_optimized = (0..self.support_vectors.nrows())
             .filter(|&x| x != i1 && x != i2)
             .collect::<Vec<usize>>();
-        //TODO: parallel iterators here; computing these kernels are EXTREMELY EXPENSIVE
         non_optimized.iter().for_each(|&x| {
             let val = label1 as f64
                 * (alpha_one_new - alpha_one)
-                * self.kernel_op_1d(self.support_vectors.row(i1), self.support_vectors.row(x))
+                * cache.get([i1, x].into(), self)
+                // * self.kernel_op_1d(self.support_vectors.row(i1), self.support_vectors.row(x))
                 + label2 as f64
                     * (alpha_two_new - alpha_two)
-                    * self.kernel_op_1d(self.support_vectors.row(i2), self.support_vectors.row(x))
+                    * cache.get([i2, x].into(), self)
+                    // * self.kernel_op_1d(self.support_vectors.row(i2), self.support_vectors.row(x))
                 + (self.bias - bias);
-            // if val > 50f64 {
-            //     dbg!(i1);
-            //     dbg!(i2);
-            //     dbg!(alpha_one_new);
-            //     dbg!(alpha_two_new);
-            //     dbg!(alpha_one);
-            //     dbg!(alpha_two);
-            //     dbg!(self.bias);
-            //     dbg!(bias);
-            //     dbg!(k11);
-            //     dbg!(k22);
-            //     dbg!(k12);
-            //     panic!("Generated error passed 10, error: {}", val);
-            //}
+
             error_cache[x] += val;
         });
         self.bias = bias;
-
-        // error_cache[i1] =
-        //     self.predict_raw(into_column_matrix(feature_one).view())[0] - label1 as f64;
-        // error_cache[i2] =
-        //     self.predict_raw(into_column_matrix(feature_two).view())[0] - label1 as f64;
-
         true
     }
 
-    pub fn _hueristic_2(&mut self, i2: usize, error_cache: &mut ArrayViewMut1<f64>) -> bool {
+    pub fn _hueristic_2(
+        &mut self,
+        i2: usize,
+        error_cache: &mut ArrayViewMut1<f64>,
+        kernel_cache: &mut KernelCache,
+    ) -> bool {
         let label2 = self.support_labels[i2];
         let alpha2 = self.alphas[i2];
         let error2 = error_cache[i2];
@@ -191,7 +187,7 @@ impl RawSVC {
                 } else {
                     i1 = argmax_1d_f64(error_cache.view())
                 }
-                let flag = self.take_step(i1, i2, error_cache);
+                let flag = self.take_step(i1, i2, error_cache, kernel_cache);
                 if flag {
                     return flag;
                 }
@@ -206,7 +202,7 @@ impl RawSVC {
                 .collect::<Vec<usize>>();
             candidates.shuffle(&mut rng);
             for i1 in candidates {
-                let flag = self.take_step(i1, i2, error_cache);
+                let flag = self.take_step(i1, i2, error_cache, kernel_cache);
                 if flag {
                     return flag;
                 }
@@ -214,7 +210,7 @@ impl RawSVC {
             //if nothing works, restart
             let random = rng.gen::<usize>();
             return (random..self.alphas.len() + random)
-                .any(|x| self.take_step(x % random, i2, error_cache));
+                .any(|x| self.take_step(x % random, i2, error_cache, kernel_cache));
         }
         false
     }
@@ -226,13 +222,15 @@ impl RawSVC {
         self.alphas = Array1::from_elem(nrows, 0f64);
         let mut error_cache =
             self.predict_raw(self.support_vectors.view()) - self.support_labels.map(|x| *x as f64);
+        let mut kernel_cache = KernelCache::new_from_feature_size(features);
         let mut count = 0;
         let mut examined = true;
         while (count > 0) || examined {
             count = 0;
             if examined {
                 for i2 in 0..nrows {
-                    let flag = self._hueristic_2(i2, &mut error_cache.view_mut());
+                    let flag =
+                        self._hueristic_2(i2, &mut error_cache.view_mut(), &mut kernel_cache);
                     count += flag as i32;
                 }
             } else {
@@ -244,7 +242,8 @@ impl RawSVC {
                     .map(|(index, _)| index)
                     .collect::<Vec<usize>>();
                 for index in candidates {
-                    let flag = self._hueristic_2(index, &mut error_cache.view_mut());
+                    let flag =
+                        self._hueristic_2(index, &mut error_cache.view_mut(), &mut kernel_cache);
                     count += flag as i32;
                 }
             }
@@ -584,7 +583,6 @@ mod tests {
             .set_c(1f64);
         svc.fit(&dataset, "Outcome");
         let value = svc.evaluate(accuracy)[0];
-        dbg!(value);
     }
 
     #[test]
