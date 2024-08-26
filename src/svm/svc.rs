@@ -1,10 +1,10 @@
 use crate::{
     base_array::BaseDataset,
     svm::{
-        kernel_cache::IndexPair, kernel_cache::KernelCache, linear_kernel_1d, linear_kernel_2d,
-        linear_kernel_mixed, polynomial_kernel_1d, polynomial_kernel_2d, polynomial_kernel_mixed,
-        rbf_kernel_1d, rbf_kernel_2d, rbf_kernel_mixed, sigmoid_kernel_1d, sigmoid_kernel_2d,
-        sigmoid_kernel_mixed, SVMKernel,
+        kernel_cache::CacheableSVM, kernel_cache::IndexPair, kernel_cache::KernelCache,
+        linear_kernel_1d, linear_kernel_2d, linear_kernel_mixed, polynomial_kernel_1d,
+        polynomial_kernel_2d, polynomial_kernel_mixed, rbf_kernel_1d, rbf_kernel_2d,
+        rbf_kernel_mixed, sigmoid_kernel_1d, sigmoid_kernel_2d, sigmoid_kernel_mixed, SVMKernel,
     },
     utils::model_selection::{TrainTestSplitStrategy, TrainTestSplitStrategyData},
     utils::{
@@ -60,8 +60,6 @@ impl RawSVC {
         let alpha_two = self.alphas[i2];
         let label1 = self.support_labels[i1];
         let label2 = self.support_labels[i2];
-        let feature_one = self.support_vectors.row(i1);
-        let feature_two = self.support_vectors.row(i2);
         let error1 = error_cache[i1];
         let error2 = error_cache[i2];
         let s = label1 * label2;
@@ -325,49 +323,6 @@ impl RawSVC {
         }
     }
 
-    pub fn kernel_op_1d(&self, row_one: ArrayView1<f64>, row_two: ArrayView1<f64>) -> f64 {
-        match self.kernel {
-            SVMKernel::RBF(gamma) => rbf_kernel_1d(row_one, row_two, gamma),
-            SVMKernel::Linear => linear_kernel_1d(row_one, row_two),
-            SVMKernel::Polynomial(degree, coef_) => {
-                polynomial_kernel_1d(row_one, row_two, degree, coef_)
-            }
-            SVMKernel::Sigmoid(coef_, alpha) => sigmoid_kernel_1d(row_one, row_two, coef_, alpha),
-        }
-    }
-
-    pub fn kernel_op_2d(&self, row_one: ArrayView2<f64>, row_two: ArrayView2<f64>) -> Array2<f64> {
-        match self.kernel {
-            SVMKernel::RBF(gamma) => rbf_kernel_2d(row_one, row_two, gamma),
-            SVMKernel::Polynomial(degree, coef_) => {
-                polynomial_kernel_2d(row_one, row_two, degree, coef_)
-            }
-            SVMKernel::Sigmoid(coef_, alpha) => sigmoid_kernel_2d(row_one, row_two, coef_, alpha),
-            SVMKernel::Linear => linear_kernel_2d(row_one, row_two),
-        }
-    }
-
-    pub fn kernel_op_mixed(
-        &self,
-        row_one: ArrayView1<f64>,
-        row_two: ArrayView2<f64>,
-    ) -> Array1<f64> {
-        match self.kernel {
-            SVMKernel::RBF(gamma) => rbf_kernel_mixed(row_one, row_two, gamma),
-            SVMKernel::Polynomial(degree, coef_) => {
-                polynomial_kernel_mixed(row_one, row_two, degree, coef_)
-            }
-            SVMKernel::Sigmoid(coef_, alpha) => {
-                sigmoid_kernel_mixed(row_one, row_two, coef_, alpha)
-            }
-            SVMKernel::Linear => linear_kernel_mixed(row_one, row_two),
-        }
-    }
-
-    pub(crate) fn kernel_op_helper(&self, i1: usize, i2: usize) -> f64 {
-        self.kernel_op_1d(self.support_vectors.row(i1), self.support_vectors.row(i2))
-    }
-
     pub fn objective_function(
         &self,
         alphas: ArrayView1<f64>,
@@ -380,6 +335,47 @@ impl RawSVC {
                 * self.kernel_op_2d(input, input)
                 * outer_product(alphas, alphas))
             .sum()
+    }
+}
+
+impl CacheableSVM for RawSVC {
+    fn kernel_op_1d(&self, row_one: ArrayView1<f64>, row_two: ArrayView1<f64>) -> f64 {
+        match self.kernel {
+            SVMKernel::RBF(gamma) => rbf_kernel_1d(row_one, row_two, gamma),
+            SVMKernel::Linear => linear_kernel_1d(row_one, row_two),
+            SVMKernel::Polynomial(degree, coef_) => {
+                polynomial_kernel_1d(row_one, row_two, degree, coef_)
+            }
+            SVMKernel::Sigmoid(coef_, alpha) => sigmoid_kernel_1d(row_one, row_two, coef_, alpha),
+        }
+    }
+
+    fn kernel_op_2d(&self, row_one: ArrayView2<f64>, row_two: ArrayView2<f64>) -> Array2<f64> {
+        match self.kernel {
+            SVMKernel::RBF(gamma) => rbf_kernel_2d(row_one, row_two, gamma),
+            SVMKernel::Polynomial(degree, coef_) => {
+                polynomial_kernel_2d(row_one, row_two, degree, coef_)
+            }
+            SVMKernel::Sigmoid(coef_, alpha) => sigmoid_kernel_2d(row_one, row_two, coef_, alpha),
+            SVMKernel::Linear => linear_kernel_2d(row_one, row_two),
+        }
+    }
+
+    fn kernel_op_mixed(&self, row_one: ArrayView1<f64>, row_two: ArrayView2<f64>) -> Array1<f64> {
+        match self.kernel {
+            SVMKernel::RBF(gamma) => rbf_kernel_mixed(row_one, row_two, gamma),
+            SVMKernel::Polynomial(degree, coef_) => {
+                polynomial_kernel_mixed(row_one, row_two, degree, coef_)
+            }
+            SVMKernel::Sigmoid(coef_, alpha) => {
+                sigmoid_kernel_mixed(row_one, row_two, coef_, alpha)
+            }
+            SVMKernel::Linear => linear_kernel_mixed(row_one, row_two),
+        }
+    }
+
+    fn kernel_op_helper(&self, i1: usize, i2: usize) -> f64 {
+        self.kernel_op_1d(self.support_vectors.row(i1), self.support_vectors.row(i2))
     }
 }
 

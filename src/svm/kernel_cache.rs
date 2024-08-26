@@ -1,7 +1,7 @@
 use crate::svm::RawSVC;
 use crate::*;
 use lru::LruCache;
-
+use ndarray::prelude::*;
 use std::num::NonZeroUsize;
 
 const AUTO_CACHE_SIZE_LIMIT: usize = 8_333_334;
@@ -16,6 +16,17 @@ impl From<[usize; 2]> for IndexPair {
         pair.sort_unstable();
         IndexPair { value: pair }
     }
+}
+
+pub(crate) trait CacheableSVM {
+    fn kernel_op_1d(&self, input_one: ArrayView1<f64>, input_two: ArrayView1<f64>) -> f64;
+    fn kernel_op_2d(&self, input_one: ArrayView2<f64>, input_two: ArrayView2<f64>) -> Array2<f64>;
+    fn kernel_op_mixed(
+        &self,
+        input_one: ArrayView1<f64>,
+        input_two: ArrayView2<f64>,
+    ) -> Array1<f64>;
+    fn kernel_op_helper(&self, index_one: usize, index_two: usize) -> f64;
 }
 
 #[derive(Debug, Clone)]
@@ -46,7 +57,7 @@ impl KernelCache {
         }
     }
 
-    pub(crate) fn get(&mut self, indices: IndexPair, svm: &RawSVC) -> f64 {
+    pub(crate) fn get<T: CacheableSVM>(&mut self, indices: IndexPair, svm: &T) -> f64 {
         *self.internal.get_or_insert(indices, || {
             svm.kernel_op_helper(indices.value[0], indices.value[1])
         })

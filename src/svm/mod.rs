@@ -3,8 +3,10 @@ use crate::utils::math::outer_product;
 use ndarray::{array, linalg::Dot, Array1, Array2, ArrayView1, ArrayView2};
 use ndarray_linalg::{norm::Norm, opnorm::OperationNorm};
 use std::ops::Neg;
+
 pub mod kernel_cache;
 pub mod svc;
+pub mod svr;
 
 #[derive(Clone, Default, Debug)]
 //the SVM kernels to use
