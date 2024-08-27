@@ -96,7 +96,7 @@ impl RawSVR {
         let alpha_one_star_old = alpha_one_star;
         let alpha_two_star_old = alpha_two_star;
 
-        let delta_phi = error_one - error_two;
+        let mut delta_phi = error_one - error_two;
 
         fn change(eps: f64, former: f64, new: f64) -> bool {
             if (new - former).abs() > eps {
@@ -203,8 +203,76 @@ impl RawSVR {
                     finished = 1;
                 }
             }
+
+            delta_phi = error_one
+                - error_two
+                - eta
+                    * ((self.alphas[i1] - self.alpha_stars[i1])
+                        - (alpha_one_old - alpha_one_star_old));
         }
+        //updating the bias term
+        let b1 = self.bias
+            + error_one
+            + self.support_labels[i1]
+                * ((self.alphas[i1] - alpha_one_old) - (self.alpha_stars[i1] - alpha_one_star_old))
+                * k11
+            + self.support_labels[i2]
+                * ((self.alphas[i2] - alpha_two_old) - (self.alpha_stars[i2] - alpha_two_star_old))
+                * k12
+            - self.eps;
+        let b1_star = self.bias
+            + error_one
+            + self.support_labels[i1]
+                * ((self.alphas[i1] - alpha_one_old) - (self.alpha_stars[i1] - alpha_one_star_old))
+                * k11
+            + self.support_labels[i2]
+                * ((self.alphas[i2] - alpha_two_old) - (self.alpha_stars[i2] - alpha_two_star_old))
+                * k12
+            + self.eps;
+        let b2 = self.bias
+            + error_two
+            + self.support_labels[i2]
+                * ((self.alphas[i1] - alpha_one_old) - (self.alpha_stars[i1] - alpha_one_star_old))
+                * k22
+            + self.support_labels[i1]
+                * ((self.alphas[i2] - alpha_two_old) - (self.alpha_stars[i2] - alpha_two_star_old))
+                * k12
+            - self.eps;
+        let b2_star = self.bias
+            + error_two
+            + self.support_labels[i2]
+                * ((self.alphas[i1] - alpha_one_old) - (self.alpha_stars[i1] - alpha_one_star_old))
+                * k22
+            + self.support_labels[i1]
+                * ((self.alphas[i2] - alpha_two_old) - (self.alpha_stars[i2] - alpha_two_star_old))
+                * k12
+            + self.eps;
+        let bias = if (0f64 < self.alphas[i1]) && (self.alphas[i1] < self.C) {
+            b1
+        } else if (0f64 < self.alpha_stars[i1]) && (self.alpha_stars[i1] < self.C) {
+            b1_star
+        } else if (0f64 < self.alphas[i2]) && (self.alpha_stars[i2] < self.C) {
+            b2
+        } else if (0f64 < self.alpha_stars[i2]) && (self.alpha_stars[i2] < self.C) {
+            b2_star
+        } else {
+            //just because, honestly
+            (b1 + b2) * 0.5
+        };
+
+        //no we've update bias, next step is to update the error cache
+        let non_optimized = (0..self.support_vectors.len())
+            .filter(|&index| index != i2 && index != i1)
+            .collect::<Vec<usize>>();
 
         true
+    }
+
+    fn predict(&self, data: ArrayView2<f64>) -> Array1<f64> {
+        let kernel = self.kernel_op_2d(self.support_vectors.view(), data);
+        let alphas = self.alphas.to_owned() - self.alpha_stars.view();
+        let weights = alphas * self.support_labels.view();
+        let res = weights.dot(&kernel.view());
+        res - self.bias
     }
 }
