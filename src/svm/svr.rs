@@ -1,9 +1,4 @@
-use crate::utils::model_selection::TrainTestSplitStrategy;
-use crate::utils::model_selection::TrainTestSplitStrategyData;
-use crate::utils::scaler::Scaler;
-use crate::utils::scaler::ScalerState;
-use ndarray::prelude::*;
-
+use crate::base_array::BaseDataset;
 use crate::svm::kernel_cache::CacheableSVM;
 use crate::svm::kernel_cache::KernelCache;
 use crate::svm::SVMKernel;
@@ -12,7 +7,15 @@ use crate::svm::{
     polynomial_kernel_2d, polynomial_kernel_mixed, rbf_kernel_1d, rbf_kernel_2d, rbf_kernel_mixed,
     sigmoid_kernel_1d, sigmoid_kernel_2d, sigmoid_kernel_mixed,
 };
-#[derive(Clone)]
+use crate::utils::math::argmax_1d_f64;
+use crate::utils::math::argmin_1d_f64;
+use crate::utils::model_selection::TrainTestSplitStrategy;
+use crate::utils::model_selection::TrainTestSplitStrategyData;
+use crate::utils::scaler::Scaler;
+use crate::utils::scaler::ScalerState;
+use ndarray::prelude::*;
+use rand::prelude::*;
+#[derive(Clone, Default, Debug)]
 pub struct RawSVR {
     C: f64,
     eps: f64,
@@ -202,6 +205,7 @@ impl RawSVR {
                 } else {
                     finished = 1;
                 }
+                case4 = 1;
             }
 
             delta_phi = error_one
@@ -257,15 +261,150 @@ impl RawSVR {
             b2_star
         } else {
             //just because, honestly
-            (b1 + b2) * 0.5
+            let arr = [b1, b2, b1_star, b2_star];
+            let min = arr.iter().fold(0f64, |left, &right| f64::min(left, right));
+            let max = arr.iter().fold(0f64, |left, &right| f64::max(left, right));
+            (min + max) * 0.5
         };
 
         //no we've update bias, next step is to update the error cache
-        let non_optimized = (0..self.support_vectors.len())
+        let non_optimized = (0..self.support_vectors.nrows())
             .filter(|&index| index != i2 && index != i1)
             .collect::<Vec<usize>>();
-
+        non_optimized.iter().for_each(|&opt| {
+            let val = self.support_labels[i1]
+                * ((self.alphas[i1] - alpha_one_old) - (self.alpha_stars[i1] - alpha_one_star_old))
+                * cache.get([i1, opt].into(), self)
+                + self.support_labels[i2]
+                    * ((self.alphas[i2] - alpha_two_old)
+                        - (self.alpha_stars[i2] - alpha_two_star_old))
+                    * cache.get([i2, opt].into(), self)
+                + (self.bias - bias);
+            error[opt] += val;
+        });
         true
+    }
+
+    fn heuristic_2(
+        &mut self,
+        i2: usize,
+        error_cache: &mut ArrayViewMut1<f64>,
+        cache: &mut KernelCache,
+    ) -> bool {
+        // let label2 = self.support_labels[i2];
+        let alpha2 = self.alphas[i2];
+        let alpha2_star = self.alpha_stars[i2];
+        let error2 = error_cache[i2];
+        let i1;
+        if (error2 > self.eps && alpha2_star < self.C)
+            || (error2 < self.eps && alpha2_star > 0f64)
+            || (-error2 > self.eps && alpha2 < self.C)
+            || (-error2 > self.eps && alpha2 > 0f64)
+        {
+            if self
+                .alphas
+                .iter()
+                .filter(|alpha| (**alpha != 0f64) && (**alpha != self.C))
+                .count()
+                > 1
+            {
+                if error2 > 0f64 {
+                    i1 = argmin_1d_f64(error_cache.view());
+                } else {
+                    i1 = argmax_1d_f64(error_cache.view())
+                }
+                let flag = self.take_step(i1, i2, error_cache, cache);
+                if flag {
+                    return flag;
+                }
+            }
+            let mut rng = rand::thread_rng();
+            let mut candidates = self
+                .alphas
+                .iter()
+                .enumerate()
+                .filter(|(_, &alphas)| (0f64 < alphas) && (alphas < self.C))
+                .map(|(index, _)| index)
+                .collect::<Vec<usize>>();
+            candidates.shuffle(&mut rng);
+            for i1 in candidates {
+                let flag = self.take_step(i1, i2, error_cache, cache);
+                if flag {
+                    return flag;
+                }
+            }
+            //if nothing works, restart
+            let random = rng.gen::<usize>();
+            return (random..self.alphas.len() + random)
+                .any(|x| self.take_step(x % random, i2, error_cache, cache));
+        }
+        false
+    }
+
+    fn binary_fit(&mut self, features: ArrayView2<f64>, labels: ArrayView1<f64>) {
+        let (nrows, ncols) = (features.nrows(), features.ncols());
+        self.support_vectors = features.to_owned();
+        self.support_labels = labels.to_owned();
+        self.alphas = Array1::from_elem(nrows, 0f64);
+        self.alpha_stars = Array1::from_elem(nrows, 0f64);
+        let mut cache = KernelCache::new_from_feature_size(features);
+        let mut errors = self.predict(features) - self.support_labels.view();
+        let mut count = 0;
+        let mut examined = true;
+        let mut loop_counter = 0;
+        let mut minimum_changed;
+        while count > 0 || examined {
+            loop_counter += 1;
+            count = 0;
+            if examined {
+                for i2 in 0..nrows {
+                    let flag = self.heuristic_2(i2, &mut errors.view_mut(), &mut cache);
+                    count += flag as i32;
+                }
+            } else {
+                let candidates = self
+                    .alphas
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, &x)| (x < 0f64) && (x < self.C))
+                    .map(|(index, _)| index)
+                    .collect::<Vec<usize>>();
+                for index in candidates {
+                    let flag = self.heuristic_2(index, &mut errors.view_mut(), &mut cache);
+                    count += flag as i32;
+                }
+            }
+            if loop_counter % 2 == 0 {
+                minimum_changed = 1f64.max(0.1 * nrows as f64);
+            } else {
+                minimum_changed = 1f64;
+            }
+            if examined {
+                examined = false;
+            } else if count < minimum_changed as i32 {
+                examined = true;
+            }
+
+            let support_indices = self
+                .alphas
+                .iter()
+                .enumerate()
+                .filter(|(_, alpha)| **alpha != 0f64)
+                .map(|(index, _)| index)
+                .collect::<Vec<usize>>();
+            self.support_labels = Array1::from_shape_fn(support_indices.len(), |x| {
+                self.support_labels[support_indices[x]]
+            });
+            self.support_vectors =
+                Array2::from_shape_fn((support_indices.len(), ncols), |(x, y)| {
+                    self.support_vectors[(support_indices[x], y)]
+                });
+            self.alphas =
+                Array1::from_shape_fn(support_indices.len(), |x| self.alphas[support_indices[x]]);
+            self.alpha_stars = Array1::from_shape_fn(support_indices.len(), |x| {
+                self.alpha_stars[support_indices[x]]
+            });
+        }
     }
 
     fn predict(&self, data: ArrayView2<f64>) -> Array1<f64> {
@@ -275,4 +414,108 @@ impl RawSVR {
         let res = weights.dot(&kernel.view());
         res - self.bias
     }
+}
+
+struct SVRBuilder {
+    svr: RawSVR,
+    strategy: TrainTestSplitStrategy,
+    data: TrainTestSplitStrategyData<f64, f64>,
+    target: usize,
+    scaler: ScalerState,
+}
+
+impl SVRBuilder {
+    pub fn new() -> Self {
+        Self {
+            svr: RawSVR::default(),
+            strategy: TrainTestSplitStrategy::default(),
+            data: TrainTestSplitStrategyData::default(),
+            target: 0,
+            scaler: ScalerState::default(),
+        }
+    }
+
+    pub fn scaler(self, scaler: ScalerState) -> Self {
+        Self { scaler, ..self }
+    }
+
+    pub fn strategy(self, strategy: TrainTestSplitStrategy) -> Self {
+        Self { strategy, ..self }
+    }
+
+    pub fn set_c(self, c: f64) -> Self {
+        let prev = self.svr;
+        Self {
+            svr: RawSVR { C: c, ..prev },
+            ..self
+        }
+    }
+
+    pub fn set_eps(self, eps: f64) -> Self {
+        let prev = self.svr;
+        Self {
+            svr: RawSVR { eps, ..prev },
+            ..self
+        }
+    }
+
+    pub fn kernel(self, kernel: SVMKernel) -> Self {
+        let prev = self.svr;
+        Self {
+            svr: RawSVR { kernel, ..prev },
+            ..self
+        }
+    }
+
+    pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
+        self.target = dataset._get_string_index(target);
+        self.data =
+            TrainTestSplitStrategyData::<f64, f64>::new_r(dataset, self.target, self.strategy);
+        let mut scaler = Scaler::from(&self.scaler);
+        scaler.fit(self.data.get_train().0);
+        scaler.transform(&mut self.data.get_train_mut().0);
+        match self.strategy {
+            TrainTestSplitStrategy::TrainTest(_) => {
+                scaler.transform(&mut self.data.get_test_mut().0);
+            }
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
+                scaler.transform(&mut self.data.get_test_mut().0);
+                scaler.transform(&mut self.data.get_eval_mut().0);
+            }
+            TrainTestSplitStrategy::None => {}
+        };
+        self.internal_fit();
+    }
+
+    fn internal_fit(&mut self) {
+        let (features, labels) = self.data.get_train();
+        self.svr.binary_fit(features, labels);
+    }
+
+    fn predict(&self, data: ArrayView2<f64>) -> Array1<f64> {
+        self.svr.predict(data)
+    }
+
+    pub fn evaluate<F>(&self, function: F) -> Vec<f64>
+    where
+        F: Fn(ArrayView1<f64>, ArrayView1<f64>) -> Vec<f64>,
+    {
+        let (features, ground_truth) = match self.strategy {
+            TrainTestSplitStrategy::None => {
+                //get train data
+                self.data.get_train()
+            }
+            TrainTestSplitStrategy::TrainTest(_) => self.data.get_test(),
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => self.data.get_eval(),
+        };
+        let preds = self.predict(features);
+        function(ground_truth, preds.view())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_convergence_svr() {}
 }
