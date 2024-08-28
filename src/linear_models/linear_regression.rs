@@ -45,6 +45,20 @@ pub struct RawLinearRegressor {
 
 impl RawLinearRegressor {
     fn fit(&mut self, features: ArrayView2<f64>, target: ArrayView1<f64>) {
+        let f = if self.include_bias {
+            let mut features = features.to_owned();
+            features
+                .push_column(Array1::ones(features.nrows()).view())
+                .unwrap();
+            features
+        } else {
+            Array2::default((0, 0))
+        };
+        let features = if self.include_bias {
+            f.view()
+        } else {
+            features.view()
+        };
         let weights = match self.regularizer {
             LinearRegularizer::None => non_regularizing_fit(features, target),
             LinearRegularizer::Ridge(var) => ridge_regularizing_fit(features, target, var),
@@ -128,20 +142,6 @@ impl LinearRegressorBuilder {
 
     fn internal_fit(&mut self) {
         let (features, target) = self.strategy_data.get_train();
-        let f = if self.internal.include_bias {
-            let mut features = features.to_owned();
-            features
-                .push_column(Array1::ones(features.nrows()).view())
-                .unwrap();
-            features
-        } else {
-            Array2::default((0, 0))
-        };
-        let features = if self.internal.include_bias {
-            f.view()
-        } else {
-            features
-        };
         self.internal.fit(features, target);
     }
 

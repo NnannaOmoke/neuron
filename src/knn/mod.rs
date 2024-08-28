@@ -8,10 +8,12 @@ use petal_neighbors::{
     BallTree,
 };
 
+use std::sync::Arc;
+use std::sync::RwLock;
 mod knnclassifier;
 mod knnregressor;
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub enum VotingChoice {
     #[default]
     Uniform,
@@ -19,15 +21,16 @@ pub enum VotingChoice {
     //the labels and the actual distances from the point
     Custom(fn(ArrayView1<f64>, ArrayView1<f64>) -> f64),
 }
-#[derive(Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub enum Distance {
     #[default]
     Euclidean,
     Manhattan,
 }
 
+#[derive(Clone)]
 pub(crate) struct BallTreeKNN<'a, M: Metric<f64>> {
-    tree: BallTree<'a, f64, M>,
+    tree: Arc<RwLock<BallTree<'a, f64, M>>>,
 }
 
 pub(crate) struct KdTreeKNN {}
@@ -38,18 +41,20 @@ impl<M: Metric<f64>> BallTreeKNN<'_, M> {
         M: Metric<f64>,
     {
         let tree = BallTree::new(points.to_owned(), metric).unwrap();
+        let tree = Arc::new(RwLock::new(tree));
         Self { tree }
     }
 
     fn query(&self, points: ArrayView2<f64>, n: usize) -> (Array2<usize>, Array2<f64>) {
         let mut closest = Array2::from_elem((points.nrows(), n), 0);
         let mut distances = Array2::from_elem((points.nrows(), n), 0f64);
+        let tree = self.tree.read().unwrap();
         points
             .rows()
             .into_iter()
             .enumerate()
             .for_each(|(index, row)| {
-                let results = self.tree.query(&row, n);
+                let results = tree.query(&row, n);
                 let closest_indices = Array1::from_vec(results.0);
                 let distance_results = Array1::from_vec(results.1);
                 closest.row_mut(index).assign(&closest_indices);

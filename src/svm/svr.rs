@@ -416,7 +416,7 @@ impl RawSVR {
     }
 }
 
-struct SVRBuilder {
+pub struct SVRBuilder {
     svr: RawSVR,
     strategy: TrainTestSplitStrategy,
     data: TrainTestSplitStrategyData<f64, f64>,
@@ -467,6 +467,17 @@ impl SVRBuilder {
         }
     }
 
+    pub fn support_vectors(&self) -> (ArrayView2<f64>, ArrayView1<f64>) {
+        (
+            self.svr.support_vectors.view(),
+            self.svr.support_labels.view(),
+        )
+    }
+
+    pub fn bias(&self) -> f64 {
+        self.svr.bias
+    }
+
     pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
         self.target = dataset._get_string_index(target);
         self.data =
@@ -510,6 +521,12 @@ impl SVRBuilder {
         };
         let preds = self.predict(features);
         function(ground_truth, preds.view())
+    }
+}
+
+impl std::fmt::Display for SVRBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "[{:?}]", self.svr)
     }
 }
 

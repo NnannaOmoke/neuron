@@ -1,5 +1,6 @@
 use super::*;
 use crate::base_array::BaseDataset;
+use crate::knn::Distance;
 use crate::knn::VotingChoice;
 use crate::utils::scaler::{Scaler, ScalerState};
 use crate::{
@@ -7,96 +8,53 @@ use crate::{
     *,
 };
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
-pub struct KNNClassifierBuilder<M: Metric<f64>> {
-    data: TrainTestSplitStrategyData<f64, u32>,
-    strategy: TrainTestSplitStrategy,
-    scaler: ScalerState,
+
+#[derive(Clone)]
+pub struct RawKNNClassifier<'lt, M: Metric<f64>> {
+    tree: BallTreeKNN<'lt, M>,
+    labels: Array1<u32>,
     voting: VotingChoice,
-    target: usize,
-    p: PhantomData<M>,
+    distance: Distance,
     n: usize,
 }
 
-pub struct KNNClassifier<M: Metric<f64>> {
-    internal: BallTreeKNN<'static, M>,
-    config: KNNClassifierBuilder<M>,
+impl Debug for RawKNNClassifier<'_, Distance> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "[{:?}, {:?}]", self.voting, self.distance)
+    }
 }
 
-impl<M: Metric<f64>> KNNClassifierBuilder<M> {
-    pub fn new() -> Self {
+impl Default for RawKNNClassifier<'_, Distance> {
+    fn default() -> Self {
         Self {
-            data: TrainTestSplitStrategyData::default(),
-            strategy: TrainTestSplitStrategy::default(),
-            scaler: ScalerState::default(),
+            tree: BallTreeKNN::new(Array2::from_elem((1, 1), 1f64).view(), Distance::Euclidean),
+            labels: Array1::default(0),
             voting: VotingChoice::default(),
-            target: 0,
+            distance: Distance::default(),
             n: 0,
-            p: PhantomData,
         }
-    }
-
-    pub fn set_n(self, n: usize) -> Self {
-        Self { n, ..self }
-    }
-    pub fn scaler(self, scaler: ScalerState) -> Self {
-        Self { scaler, ..self }
-    }
-
-    pub fn strategy(self, strategy: TrainTestSplitStrategy) -> Self {
-        Self { strategy, ..self }
-    }
-
-    pub fn voting(self, voting: VotingChoice) -> Self {
-        Self { voting, ..self }
-    }
-
-    pub fn fit(
-        mut self,
-        dataset: &BaseDataset,
-        target: &str,
-        n: usize,
-        metric: M,
-    ) -> KNNClassifier<M> {
-        self.target = dataset._get_string_index(target);
-        self.data =
-            TrainTestSplitStrategyData::<f64, u32>::new_c(dataset, self.target, self.strategy);
-        let mut scaler = Scaler::from(&self.scaler);
-        self.n = n;
-        scaler.fit(self.data.get_train().0);
-        scaler.transform(&mut self.data.get_train_mut().0);
-        match self.strategy {
-            TrainTestSplitStrategy::TrainTest(_) => {
-                scaler.transform(&mut self.data.get_test_mut().0);
-            }
-            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
-                scaler.transform(&mut self.data.get_test_mut().0);
-                scaler.transform(&mut self.data.get_test_mut().0);
-            }
-            _ => {}
-        };
-        KNNClassifier::<M>::new(self, metric)
     }
 }
 
-impl<M: Metric<f64>> KNNClassifier<M> {
-    pub fn new(config: KNNClassifierBuilder<M>, metric: M) -> Self {
-        let data = config.data.get_train().0;
-        let tree = BallTreeKNN::new(data, metric);
-        Self {
-            internal: tree,
-            config,
-        }
+impl RawKNNClassifier<'_, Distance> {
+    fn fit(&mut self, features: ArrayView2<f64>, labels: ArrayView1<u32>) {
+        let tree = BallTreeKNN::new(features, self.distance);
+        self.labels = labels.to_owned();
+        self.tree = tree;
     }
-    pub fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
-        let n = self.config.n;
-        let results = self.internal.query(data, n);
+
+    fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
+        let n = self.n;
+        let results = self.tree.query(data, n);
         let mut model_results = Array1::from_elem(data.nrows(), 0);
         let values = Array2::from_shape_fn((results.0.nrows(), n), |(x, y)| {
-            self.config.data.get_train().1[results.0[(x, y)]]
+            self.labels[results.0[(x, y)]]
         });
-        match self.config.voting {
+        let tree = self.tree.tree.read().unwrap();
+        match self.voting {
             VotingChoice::Uniform => {
                 model_results
                     .iter_mut()
@@ -106,8 +64,8 @@ impl<M: Metric<f64>> KNNClassifier<M> {
                         let most_common = counter.most_common();
                         let value = most_common[0].0;
                         if most_common[0].1 == most_common[0].1 {
-                            let val = self.internal.tree.query_nearest(&data.row(index)).0;
-                            *ptr = self.config.data.get_train().1[val];
+                            let val = tree.query_nearest(&data.row(index)).0;
+                            *ptr = self.labels[val];
                         } else {
                             *ptr = *value;
                         }
@@ -163,22 +121,107 @@ impl<M: Metric<f64>> KNNClassifier<M> {
         }
         model_results
     }
+}
+
+pub struct KNNClassifierBuilder<'lt> {
+    tree: RawKNNClassifier<'lt, Distance>,
+    data: TrainTestSplitStrategyData<f64, u32>,
+    strategy: TrainTestSplitStrategy,
+    scaler: ScalerState,
+    target: usize,
+}
+
+impl<'lt> KNNClassifierBuilder<'lt> {
+    pub fn new() -> Self {
+        Self {
+            tree: RawKNNClassifier::default(),
+            data: TrainTestSplitStrategyData::default(),
+            strategy: TrainTestSplitStrategy::default(),
+            scaler: ScalerState::default(),
+            target: 0,
+        }
+    }
+
+    pub fn scaler(self, scaler: ScalerState) -> Self {
+        Self { scaler, ..self }
+    }
+
+    pub fn strategy(self, strategy: TrainTestSplitStrategy) -> Self {
+        Self { strategy, ..self }
+    }
+
+    pub fn voting(self, voting: VotingChoice) -> Self {
+        let prev = self.tree;
+        Self {
+            tree: RawKNNClassifier { voting, ..prev },
+            ..self
+        }
+    }
+
+    pub fn set_n(self, n: usize) -> Self {
+        let prev = self.tree;
+        Self {
+            tree: RawKNNClassifier { n, ..prev },
+            ..self
+        }
+    }
+
+    pub fn distance(self, distance: Distance) -> Self {
+        let prev = self.tree;
+        Self {
+            tree: RawKNNClassifier { distance, ..prev },
+            ..self
+        }
+    }
+
+    pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
+        self.target = dataset._get_string_index(target);
+        self.data =
+            TrainTestSplitStrategyData::<f64, u32>::new_c(dataset, self.target, self.strategy);
+        let mut scaler = Scaler::from(&self.scaler);
+        scaler.fit(self.data.get_train().0);
+        scaler.transform(&mut self.data.get_train_mut().0);
+        match self.strategy {
+            TrainTestSplitStrategy::TrainTest(_) => {
+                scaler.transform(&mut self.data.get_test_mut().0);
+            }
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
+                scaler.transform(&mut self.data.get_test_mut().0);
+                scaler.transform(&mut self.data.get_test_mut().0);
+            }
+            _ => {}
+        };
+        self.internal_fit();
+    }
+
+    fn internal_fit(&mut self) {
+        let (features, labels) = self.data.get_train();
+        self.tree.fit(features, labels);
+    }
+
+    pub fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
+        self.tree.predict(data)
+    }
 
     pub fn evaluate<F: Fn(ArrayView1<u32>, ArrayView1<u32>) -> Vec<f64>>(
         &self,
         function: F,
     ) -> Vec<f64> {
         //placeholder
-        let (features, ground_truth) = match self.config.strategy {
+        let (features, ground_truth) = match self.strategy {
             TrainTestSplitStrategy::None => {
                 //get train data
-                self.config.data.get_train()
+                self.data.get_train()
             }
-            TrainTestSplitStrategy::TrainTest(_) => self.config.data.get_test(),
-            TrainTestSplitStrategy::TrainTestEval(_, _, _) => self.config.data.get_eval(),
+            TrainTestSplitStrategy::TrainTest(_) => self.data.get_test(),
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => self.data.get_eval(),
         };
         let preds = self.predict(features);
         function(ground_truth, preds.view())
+    }
+
+    pub fn raw_mut(&'lt mut self) -> &'lt mut RawKNNClassifier<Distance> {
+        &mut self.tree
     }
 }
 
@@ -196,12 +239,13 @@ mod test {
             b',',
         );
         let dataset = dataset.unwrap();
-        let knn = KNNClassifierBuilder::new()
+        let mut knn = KNNClassifierBuilder::new()
             .scaler(ScalerState::MinMax)
             .strategy(TrainTestSplitStrategy::TrainTest(0.7))
             .voting(VotingChoice::Distance)
+            .distance(Distance::Euclidean)
             .set_n(5);
-        let knn = knn.fit(&dataset, "Outcome", 5, Distance::Euclidean);
+        knn.fit(&dataset, "Outcome");
         let accuracy = knn.evaluate(accuracy);
         dbg!(accuracy[0]);
     }
@@ -215,12 +259,13 @@ mod test {
             b',',
         );
         let dataset = dataset.unwrap();
-        let knn = KNNClassifierBuilder::new()
+        let mut knn = KNNClassifierBuilder::new()
             .scaler(ScalerState::MinMax)
             .strategy(TrainTestSplitStrategy::TrainTest(0.7))
             .voting(VotingChoice::Distance)
+            .distance(Distance::Euclidean)
             .set_n(5);
-        let knn = knn.fit(&dataset, "species", 5, Distance::Manhattan);
+        knn.fit(&dataset, "species");
         let accuracy = knn.evaluate(accuracy);
         dbg!(accuracy[0]);
     }
