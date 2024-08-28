@@ -3,7 +3,8 @@ use crate::{
     dtype::DType,
     utils::{
         math::{
-            argmax_1d_f64, dot, one_hot_encode_1d, outer_product, softmax_1d, solve_linear_systems,
+            argmax_1d_f64, dot, nunique, one_hot_encode_1d, outer_product, softmax_1d,
+            solve_linear_systems,
         },
         model_selection::{self, TrainTestSplitStrategy, TrainTestSplitStrategyData},
         scaler::{Scaler, ScalerState},
@@ -24,118 +25,52 @@ use rand::{
 use std::{cell::RefCell, collections::HashSet, default, ops::Rem, os::unix::thread};
 
 pub struct LogisticRegressorBuilder {
-    weights: Array2<f64>,
-    bias: f64,
     scaler: ScalerState,
     strategy: TrainTestSplitStrategy,
     data: TrainTestSplitStrategyData<f64, u32>,
-    regularizer: Option<f64>,
-    nclasses: usize,
     target_index: usize,
-    include_bias: bool,
+    internal: RawLogisticRegressor,
 }
 
-impl LogisticRegressorBuilder {
-    pub fn new(include_bias: bool) -> Self {
-        Self {
-            weights: Array2::default((0, 0)),
-            bias: 0.0,
-            scaler: ScalerState::None,
-            strategy: TrainTestSplitStrategy::None,
-            data: TrainTestSplitStrategyData::default(),
-            regularizer: None,
-            nclasses: 0,
-            target_index: 0,
-            include_bias,
-        }
-    }
+#[derive(Clone, Default, Debug)]
+pub struct RawLogisticRegressor {
+    weights: Array2<f64>,
+    bias: f64,
+    regularizer: Option<f64>,
+    nclasses: usize,
+    include_bias: bool,
+    max_iters: usize,
+}
 
-    pub fn bias(&self) -> f64 {
-        self.bias
-    }
-
-    pub fn weights(&self) -> ArrayView2<f64> {
-        self.weights.view()
-    }
-
-    pub fn train_test_split_strategy(self, strategy: TrainTestSplitStrategy) -> Self {
-        Self { strategy, ..self }
-    }
-
-    pub fn scaler(self, scaler: ScalerState) -> Self {
-        Self { scaler, ..self }
-    }
-
-    pub fn regularizer(self, value: f64) -> Self {
-        Self {
-            regularizer: Some(value),
-            ..self
-        }
-    }
-
-    pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
-        self.target_index = dataset._get_string_index(target);
-        let nlabels = dataset.nunique(target);
-        self.nclasses = nlabels;
-        //splits into tts
-        self.data = TrainTestSplitStrategyData::<f64, u32>::new_c(
-            dataset,
-            self.target_index,
-            self.strategy,
-        );
-        let mut scaler = Scaler::from(&self.scaler);
-        scaler.fit(self.data.get_train().0);
-        scaler.transform(&mut self.data.get_train_mut().0);
-        match self.strategy {
-            TrainTestSplitStrategy::TrainTest(_) => {
-                scaler.transform(&mut self.data.get_test_mut().0)
-            }
-            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
-                scaler.transform(&mut self.data.get_test_mut().0);
-                scaler.transform(&mut self.data.get_eval_mut().0);
-            }
-            _ => {}
-        };
-        self.internal_fit()
-    }
-
-    fn internal_fit(&mut self) {
-        if self.include_bias {
-            self.data
-                .train_features
-                .push_column(Array1::ones(self.data.train_features.nrows()).view())
-                .unwrap();
-        }
-        let (features, target) = self.data.get_train();
-        if self.nclasses == 1 {
-            panic!("Not enough classes!");
-        }
-        if self.nclasses == 2 {
-            let weights_1d = Self::binary_fit(features, target, 100, self.regularizer);
-            if self.include_bias {
-                let mut weights_2d = Array2::from_elem((1, weights_1d.len() - 1), 0f64);
-                weights_2d.row_mut(0).assign(&weights_1d.slice(s![..-1]));
-                self.weights = weights_2d;
-                self.bias = *weights_1d.last().unwrap();
-            } else {
-                let mut weights_2d = Array2::from_elem((1, weights_1d.len()), 0f64);
-                weights_2d.row_mut(0).assign(&weights_1d.view());
-                self.weights = weights_2d;
-            }
-        } else if self.nclasses > 2 {
-            let weights =
-                Self::multinomial_fit(features, target, 100, self.regularizer, self.nclasses);
-            self.weights = weights;
-        }
-    }
+impl RawLogisticRegressor {
     //uses the SAG algorithm
     //another alternative for super-fast convergence is the irls
-    pub fn binary_fit(
-        features: ArrayView2<f64>,
-        target: ArrayView1<u32>,
-        epochs: usize,
-        l1_regularization: Option<f64>,
-    ) -> Array1<f64> {
+    pub fn fit(&mut self, features: ArrayView2<f64>, target: ArrayView1<u32>) {
+        self.nclasses = nunique(target);
+        let f = if self.include_bias {
+            let mut features = features.to_owned();
+            features
+                .push_column(Array1::ones(features.nrows()).view())
+                .unwrap();
+            features
+        } else {
+            Array2::default((0, 0))
+        };
+        let features = if self.include_bias {
+            f.view()
+        } else {
+            features.view()
+        };
+        match self.nclasses {
+            1 => panic!("Not enough classes to perform a classification task"),
+            2 => self.binary_fit(features, target),
+            _ => self.multinomial_fit(features, target),
+        }
+    }
+
+    pub fn binary_fit(&mut self, features: ArrayView2<f64>, target: ArrayView1<u32>) {
+        let epochs = self.max_iters;
+        let l1_regularization = self.regularizer;
         let (nrows, ncols) = (features.shape()[0], features.shape()[1]);
         let mut weights = Array1::ones(ncols);
         let mut grads = Array1::zeros(nrows);
@@ -160,16 +95,20 @@ impl LogisticRegressorBuilder {
             seen += 1;
             choice = rand_gen.gen_range(0..nrows);
         }
-        weights
+        let weights = if self.include_bias {
+            self.bias = *weights.last().unwrap();
+            weights.slice(s![..-1]).to_owned()
+        } else {
+            weights
+        };
+        let array = Array2::from_shape_fn((1, weights.len()), |(_, y)| weights[y]);
+        self.weights = array;
     }
 
-    pub fn multinomial_fit(
-        features: ArrayView2<f64>,
-        labels: ArrayView1<u32>,
-        epochs: usize,
-        l1_regularization: Option<f64>,
-        nclasses: usize,
-    ) -> Array2<f64> {
+    pub fn multinomial_fit(&mut self, features: ArrayView2<f64>, labels: ArrayView1<u32>) {
+        let nclasses = self.nclasses;
+        let epochs = self.max_iters;
+        let l1_regularization = self.regularizer;
         let (nrows, ncols) = (features.shape()[0], features.shape()[1]);
         let mut weights = Array2::ones((ncols, nclasses));
         let mut grads = Array2::zeros((nrows, nclasses));
@@ -194,10 +133,17 @@ impl LogisticRegressorBuilder {
             seen += 1;
             choice = rand_gen.gen_range(0..nrows);
         }
-        weights
+        self.weights = weights;
     }
 
     fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
+        if self.nclasses == 2 {
+            return self.predict_binary(data);
+        }
+        self.predict_multinomial(data)
+    }
+
+    fn predict_binary(&self, data: ArrayView2<f64>) -> Array1<u32> {
         let weights_array = self.weights.row(0);
         let result = data.dot(&weights_array);
         result
@@ -212,6 +158,104 @@ impl LogisticRegressorBuilder {
             .into_iter()
             .map(|x| argmax_1d_f64(x).to_u32().unwrap())
             .collect::<Array1<u32>>()
+    }
+}
+
+impl LogisticRegressorBuilder {
+    pub fn new() -> Self {
+        Self {
+            scaler: ScalerState::None,
+            strategy: TrainTestSplitStrategy::None,
+            data: TrainTestSplitStrategyData::default(),
+            target_index: 0,
+            internal: RawLogisticRegressor::default(),
+        }
+    }
+
+    pub fn bias(&self) -> f64 {
+        self.internal.bias
+    }
+
+    pub fn weights(&self) -> ArrayView2<f64> {
+        self.internal.weights.view()
+    }
+
+    pub fn train_test_split_strategy(self, strategy: TrainTestSplitStrategy) -> Self {
+        Self { strategy, ..self }
+    }
+
+    pub fn scaler(self, scaler: ScalerState) -> Self {
+        Self { scaler, ..self }
+    }
+
+    pub fn max_iters(self, max_iters: usize) -> Self {
+        let prev = self.internal;
+        Self {
+            internal: RawLogisticRegressor { max_iters, ..prev },
+            ..self
+        }
+    }
+
+    pub fn include_bias(self, include_bias: bool) -> Self {
+        let prev = self.internal;
+        Self {
+            internal: RawLogisticRegressor {
+                include_bias,
+                ..prev
+            },
+            ..self
+        }
+    }
+
+    pub fn regularizer(self, value: f64) -> Self {
+        let prev = self.internal;
+        Self {
+            internal: RawLogisticRegressor {
+                regularizer: Some(value),
+                ..prev
+            },
+            ..self
+        }
+    }
+
+    pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
+        self.target_index = dataset._get_string_index(target);
+        //splits into tts
+        self.data = TrainTestSplitStrategyData::<f64, u32>::new_c(
+            dataset,
+            self.target_index,
+            self.strategy,
+        );
+        let mut scaler = Scaler::from(&self.scaler);
+        scaler.fit(self.data.get_train().0);
+        scaler.transform(&mut self.data.get_train_mut().0);
+        match self.strategy {
+            TrainTestSplitStrategy::TrainTest(_) => {
+                scaler.transform(&mut self.data.get_test_mut().0)
+            }
+            TrainTestSplitStrategy::TrainTestEval(_, _, _) => {
+                scaler.transform(&mut self.data.get_test_mut().0);
+                scaler.transform(&mut self.data.get_eval_mut().0);
+            }
+            _ => {}
+        };
+        self.internal_fit()
+    }
+
+    fn internal_fit(&mut self) {
+        let (features, target) = self.data.get_train();
+
+        self.internal.fit(features, target);
+    }
+    //uses the SAG algorithm
+    //another alternative for super-fast convergence is the irls
+
+    fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
+        self.internal.predict(data)
+    }
+
+    pub fn raw_mut(&mut self) -> &mut RawLogisticRegressor {
+        &mut self.internal
     }
 
     pub fn evaluate<F>(&self, function: F) -> Vec<f64>
@@ -253,7 +297,7 @@ mod tests {
             b',',
         )
         .unwrap();
-        let mut classifier = LogisticRegressorBuilder::new(false)
+        let mut classifier = LogisticRegressorBuilder::new()
             .scaler(ScalerState::MinMax)
             .train_test_split_strategy(TrainTestSplitStrategy::TrainTest(0.7));
         classifier.fit(&dataset, "Outcome");

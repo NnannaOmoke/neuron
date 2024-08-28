@@ -1,10 +1,11 @@
-use std::cmp;
-
 use super::*;
 use crate::*;
 use ndarray::{Array1, Array2, ArrayView1, ArrayViewMut1, ArrayViewMut2};
 use rand::prelude::ThreadRng;
 use rand::seq::SliceRandom;
+use std::cmp;
+use std::collections::HashSet;
+use std::hash::Hash;
 
 pub fn forward_elimination(array: &mut ArrayViewMut2<f64>) {
     let len = array.shape()[0];
@@ -150,6 +151,17 @@ pub fn outer_product<T: 'static + Float>(
     input_two: ArrayView1<T>,
 ) -> Array2<T> {
     into_row_matrix(input_one).dot(&into_column_matrix(input_two).view())
+}
+
+pub fn nunique<T: Clone + Hash + Eq>(vector: ArrayView1<T>) -> usize {
+    let set: HashSet<&T> = HashSet::from_iter(vector.iter());
+    set.len()
+}
+
+pub fn nunique_f64(vector: ArrayView1<f64>) -> usize {
+    let set: HashSet<NotNan<f64>> =
+        HashSet::from_iter(vector.iter().map(|&f| NotNan::new(f).unwrap()));
+    set.len()
 }
 
 #[cfg(test)]

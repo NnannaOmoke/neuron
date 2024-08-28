@@ -1,49 +1,28 @@
 use crate::base_array::BaseDataset;
 use crate::utils::math::argmax_1d_f64;
 use crate::utils::model_selection::{TrainTestSplitStrategy, TrainTestSplitStrategyData};
-use ndarray::{Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2};
+use ndarray::prelude::*;
+use std::fmt::Display;
 use std::iter::zip;
 
 pub struct MultinomialNB {
     data: TrainTestSplitStrategyData<f64, u32>,
     strategy: TrainTestSplitStrategy,
+    nb: RawNB,
+    target: usize,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct RawNB {
     alpha: f64,
     weights: Array2<f64>,
-    target: usize,
     nclasses: usize,
 }
 
-impl MultinomialNB {
-    fn new(alpha: f64) -> Self {
-        Self {
-            data: TrainTestSplitStrategyData::default(),
-            strategy: TrainTestSplitStrategy::default(),
-            weights: Array2::default((0, 0)),
-            alpha,
-            target: 0,
-            nclasses: 0,
-        }
-    }
-
-    fn strategy(self, strategy: TrainTestSplitStrategy) -> Self {
-        Self { strategy, ..self }
-    }
-
-    pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
-        self.target = dataset._get_string_index(target);
-        self.nclasses = dataset.nunique(target);
-        self.data =
-            TrainTestSplitStrategyData::<f64, u32>::new_c(dataset, self.target, self.strategy);
-        let (features, labels) = self.data.get_train();
-        self.weights = Self::multinomial_fit(features, labels, self.nclasses, self.alpha);
-    }
-
-    fn multinomial_fit(
-        features: ArrayView2<f64>,
-        labels: ArrayView1<u32>,
-        nclasses: usize,
-        alpha: f64,
-    ) -> Array2<f64> {
+impl RawNB {
+    fn multinomial_fit(&mut self, features: ArrayView2<f64>, labels: ArrayView1<u32>) {
+        let alpha = self.alpha;
+        let nclasses = self.nclasses;
         let mut prob_per_class = Array2::zeros((features.ncols(), nclasses));
         let mut class_vocab_count = Array1::from_elem(nclasses, 0f64);
         (0..nclasses).for_each(|class| {
@@ -72,7 +51,7 @@ impl MultinomialNB {
                     .for_each(|(index, value)| *value = *value / class_vocab_count[index]);
                 prob_per_class.row_mut(index).assign(&row);
             });
-        prob_per_class
+        self.weights = prob_per_class;
     }
 
     fn predict(&self, input: ArrayView2<usize>) -> Array1<u32> {
@@ -101,6 +80,46 @@ impl MultinomialNB {
             .for_each(|(index, row)| return_val[index] = argmax_1d_f64(row) as u32);
         return_val
     }
+}
+
+impl MultinomialNB {
+    fn new() -> Self {
+        Self {
+            data: TrainTestSplitStrategyData::default(),
+            strategy: TrainTestSplitStrategy::default(),
+            nb: RawNB::default(),
+            target: 0,
+        }
+    }
+
+    pub fn strategy(self, strategy: TrainTestSplitStrategy) -> Self {
+        Self { strategy, ..self }
+    }
+
+    pub fn alphas(self, alpha: f64) -> Self {
+        let prev = self.nb;
+        Self {
+            nb: RawNB { alpha, ..prev },
+            ..self
+        }
+    }
+
+    pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
+        self.target = dataset._get_string_index(target);
+        self.nb.nclasses = dataset.nunique(target);
+        self.data =
+            TrainTestSplitStrategyData::<f64, u32>::new_c(dataset, self.target, self.strategy);
+        self.internal_fit();
+    }
+
+    fn internal_fit(&mut self) {
+        let (features, labels) = self.data.get_train();
+        self.nb.multinomial_fit(features, labels)
+    }
+
+    pub fn predict(&self, data: ArrayView2<usize>) -> Array1<u32> {
+        self.nb.predict(data)
+    }
 
     pub fn evaluate<F>(&self, function: F) -> Vec<f64>
     where
@@ -116,5 +135,11 @@ impl MultinomialNB {
         };
         //TODO: implement after writing vectorizers and tfidf
         unimplemented!()
+    }
+}
+
+impl Display for MultinomialNB {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "[{:?}]", self.nb)
     }
 }

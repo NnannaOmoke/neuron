@@ -26,39 +26,65 @@ use crate::{
 
 use neuron_macros::CrossValidator;
 
-#[derive(CrossValidator, Clone)]
+#[derive(Clone)]
 pub struct LinearRegressorBuilder {
-    weights: Vec<f64>,
-    bias: f64,
-    #[validate]
     scaler: ScalerState,
     strategy: TrainTestSplitStrategy,
     strategy_data: TrainTestSplitStrategyData<f64, f64>,
     target_col: usize,
-    #[validate]
-    regularizer: LinearRegularizer,
+    internal: RawLinearRegressor,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct RawLinearRegressor {
+    weights: Array1<f64>,
+    bias: f64,
     include_bias: bool,
+    regularizer: LinearRegularizer,
+}
+
+impl RawLinearRegressor {
+    fn fit(&mut self, features: ArrayView2<f64>, target: ArrayView1<f64>) {
+        let weights = match self.regularizer {
+            LinearRegularizer::None => non_regularizing_fit(features, target),
+            LinearRegularizer::Ridge(var) => ridge_regularizing_fit(features, target, var),
+            LinearRegularizer::Lasso(var, iters) => {
+                _coordinate_descent(features, target, var, None, iters)
+            }
+            LinearRegularizer::ElasticNet(l1, l2, iters) => {
+                _coordinate_descent(features, target, l1, Some(l2), iters)
+            }
+        };
+        if self.include_bias {
+            self.bias = *weights.last().unwrap();
+            self.weights = weights.slice(s![..-1]).to_owned();
+        } else {
+            self.weights = weights;
+        }
+    }
+    fn predict(&self, data: ArrayView2<f64>) -> Array1<f64> {
+        let mut array = data.dot(&self.weights.view());
+        array += self.bias;
+        array
+    }
 }
 
 impl LinearRegressorBuilder {
-    pub fn new(include_bias: bool) -> Self {
+    pub fn new() -> Self {
         Self {
-            weights: vec![],
-            bias: 0f64,
             scaler: ScalerState::None,
             strategy: TrainTestSplitStrategy::None,
             strategy_data: TrainTestSplitStrategyData::default(),
             target_col: 0,
-            regularizer: LinearRegularizer::None,
-            include_bias,
+            internal: RawLinearRegressor::default(),
         }
     }
     pub fn bias(&self) -> f64 {
-        self.bias
+        self.internal.bias
     }
 
-    pub fn weights(&self) -> &Vec<f64> {
-        &self.weights
+    pub fn weights(&self) -> ArrayView1<f64> {
+        self.internal.weights.view()
     }
 
     pub fn train_test_split_strategy(self, strategy: TrainTestSplitStrategy) -> Self {
@@ -70,17 +96,14 @@ impl LinearRegressorBuilder {
     }
 
     pub fn regularizer(self, regularizer: LinearRegularizer) -> Self {
+        let prev = self.internal;
         Self {
-            regularizer,
+            internal: RawLinearRegressor {
+                regularizer,
+                ..prev
+            },
             ..self
         }
-    }
-
-    pub fn predict(&self, data: ArrayView2<f64>) -> Array1<f64> {
-        let weights = Array1::from_vec(self.weights.clone());
-        let mut array = data.dot(&weights.view());
-        array += self.bias;
-        array
     }
 
     pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
@@ -103,29 +126,9 @@ impl LinearRegressorBuilder {
         self.internal_fit();
     }
 
-    pub fn fit_from_tts_data(&mut self, data: &TrainTestSplitStrategyData<f64, f64>) {
-        let (features, target) = data.get_train();
-        let weights = match self.regularizer {
-            LinearRegularizer::None => non_regularizing_fit(features, target),
-            LinearRegularizer::Ridge(var) => ridge_regularizing_fit(features, target, var),
-            LinearRegularizer::Lasso(var, iters) => {
-                _coordinate_descent(features, target, var, None, iters)
-            }
-            LinearRegularizer::ElasticNet(l1, l2, iters) => {
-                _coordinate_descent(features, target, l1, Some(l2), iters)
-            }
-        };
-        if self.include_bias {
-            self.weights = weights.to_vec()[..weights.len() - 1].to_vec();
-            self.bias = *weights.last().unwrap();
-        } else {
-            self.weights = weights.to_vec();
-        }
-    }
-
     fn internal_fit(&mut self) {
         let (features, target) = self.strategy_data.get_train();
-        let f = if self.include_bias {
+        let f = if self.internal.include_bias {
             let mut features = features.to_owned();
             features
                 .push_column(Array1::ones(features.nrows()).view())
@@ -134,27 +137,16 @@ impl LinearRegressorBuilder {
         } else {
             Array2::default((0, 0))
         };
-        let features = if self.include_bias {
+        let features = if self.internal.include_bias {
             f.view()
         } else {
             features
         };
-        let weights = match self.regularizer {
-            LinearRegularizer::None => non_regularizing_fit(features, target),
-            LinearRegularizer::Ridge(var) => ridge_regularizing_fit(features, target, var),
-            LinearRegularizer::Lasso(var, iters) => {
-                _coordinate_descent(features, target, var, None, iters)
-            }
-            LinearRegularizer::ElasticNet(l1, l2, iters) => {
-                _coordinate_descent(features, target, l1, Some(l2), iters)
-            }
-        };
-        if self.include_bias {
-            self.weights = weights.to_vec()[..weights.len() - 1].to_vec();
-            self.bias = *weights.last().unwrap();
-        } else {
-            self.weights = weights.to_vec();
-        }
+        self.internal.fit(features, target);
+    }
+
+    pub fn predict(&self, data: ArrayView2<f64>) -> Array1<f64> {
+        self.internal.predict(data)
     }
 
     pub fn evaluate<F>(&self, function: F) -> Vec<f64>
@@ -174,15 +166,15 @@ impl LinearRegressorBuilder {
         let preds = self.predict(features);
         function(ground_truth, preds.view())
     }
+
+    pub(crate) fn raw_mut(&mut self) -> &mut RawLinearRegressor {
+        &mut self.internal
+    }
 }
 
 impl Display for LinearRegressorBuilder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "[{:?}, {:?}, {:?}, {:?}, {:?}]",
-            &self.scaler, &self.strategy, &self.regularizer, &self.weights, &self.bias
-        )
+        write!(f, "[{:?}]", self.internal)
     }
 }
 
@@ -207,7 +199,7 @@ mod tests {
             b',',
         )
         .unwrap();
-        let mut learner = LinearRegressorBuilder::new(false)
+        let mut learner = LinearRegressorBuilder::new()
             .scaler(utils::scaler::ScalerState::MinMax)
             .train_test_split_strategy(utils::model_selection::TrainTestSplitStrategy::TrainTest(
                 0.7,

@@ -579,6 +579,7 @@ mod tests {
             .set_c(1f64);
         svc.fit(&dataset, "Outcome");
         let value = svc.evaluate(accuracy)[0];
+        dbg!(value);
     }
 
     #[test]
