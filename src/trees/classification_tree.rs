@@ -31,12 +31,12 @@ pub struct RawClassificationTree {
 }
 
 impl RawClassificationTree {
-    fn fit(&mut self, features: ArrayView2<f64>, labels: ArrayView1<u32>) {
+    pub fn fit(&mut self, features: ArrayView2<f64>, labels: ArrayView1<u32>) {
         self.root =
             Some(self.build_internal(features, labels, Vec::from_iter(0..features.nrows()), 0));
     }
 
-    fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
+    pub fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
         let mut array = Array1::<u32>::default(data.nrows());
         let mut idx = 0usize;
         match &self.root {
