@@ -7,7 +7,7 @@
 @workgroup_size(1)
 fn matmul(@builtin(global_invocation_id) pos: vec3u) {
     output[pos.x * dims.x + pos.y] = 0;
-    for (var i: u32 = 0; i < dims.w; i++) {
-        output[pos.x * dims.x + pos.y] += lhs[pos.x * dims.x + i] * rhs[i * dims.z + pos.y];
+    for (var i: u32 = 0; i < dims.y; i++) {
+        output[pos.x * dims.x + pos.y] += lhs[pos.x * dims.x + i] * rhs[i * dims.w + pos.y];
     }
 }
