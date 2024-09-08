@@ -3,12 +3,16 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("matrices were not of the same dimentions")]
+    #[error("matrices were not of compatible dimentions")]
     BadMatrixSizes,
     #[error(transparent)]
     BufferAsyncError(#[from] wgpu::BufferAsyncError),
     #[error(transparent)]
     TokioOneshotChannelReveiveError(#[from] tokio::sync::oneshot::error::RecvError),
+}
+
+pub fn get_needed_buffer_size(buffer_len: usize) -> u64 {
+    (buffer_len * size_of::<f32>()) as u64
 }
 
 fn create_loadable_buffer(

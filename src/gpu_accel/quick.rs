@@ -1,19 +1,29 @@
 use crate::gpu_accel::utils::{create_loaded_buffer, create_loaded_buffer_from_mut};
 
-use super::{shaders::init_dot_in_place, utils::{self}};
-use ndarray::{ArrayView2, ArrayViewMut2};
+use super::{shaders::init_dot_in_place, utils};
+use ndarray::{Array2, ArrayView2, ArrayViewMut2};
 use std::{mem::size_of, sync::Arc};
 use thiserror::Error;
 use tokio::sync::Notify;
 use wgpu::util::DeviceExt;
 
-pub async fn matmul32(
-    mut target: ArrayViewMut2<'_, f32>,
+/// Preforms matrix multiplication of f32s into a mutable output array view.
+pub async fn matmul32_extern(
+    lhs: ArrayView2<'_, f32>,
     rhs: ArrayView2<'_, f32>,
+    mut out: ArrayViewMut2<'_, f32>,
 ) -> Result<(), utils::Error> {
-    assert_eq!(target.dim(), rhs.dim());
-
-    let dims = target.dim();
+    assert_eq!(
+        lhs.dim().1,
+        rhs.dim().0,
+        "col count of lhs must == row count of rhs"
+    );
+    let out_dim = out.dim();
+    assert_eq!(
+        out_dim,
+        (lhs.dim().0, rhs.dim().1),
+        "out dims must be row_count(lhs) * col_count(rhs)"
+    );
 
     let instance = wgpu::Instance::default();
     let adapter = instance
@@ -36,17 +46,23 @@ pub async fn matmul32(
         .await
         .expect("could not get device from wgpu adapter");
 
-    let target_buffer =
-        create_loaded_buffer_from_mut(&device, &target, true, "`matmul32` `target`").await?;
+    let lhs_buffer = create_loaded_buffer(&device, &lhs, false, "`matmul32` `lhs`").await?;
     let rhs_buffer = create_loaded_buffer(&device, &rhs, false, "`matmul33` `rhs`").await?;
-    let x_dim_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("neuron matmul32 input x dim buffer"),
-        contents: bytemuck::bytes_of(&dims.0),
+    let dims_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("neuron matmul32 input dims buffer"),
+        contents: bytemuck::bytes_of(&[lhs.dim().0, lhs.dim().1, rhs.dim().0, rhs.dim().1]),
         usage: wgpu::BufferUsages::UNIFORM,
+    });
+    let output_buffer_size = (out_dim.0 * out_dim.1 * size_of::<f32>()) as wgpu::BufferAddress;
+    let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("neuron matmul32 output buffer"),
+        size: output_buffer_size,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
     });
     let output_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("neuron matmul32 output staging buffer"),
-        size: (target.len() * size_of::<f32>()) as wgpu::BufferAddress,
+        size: output_buffer_size,
         usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -60,7 +76,7 @@ pub async fn matmul32(
                 binding: 0,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
@@ -86,6 +102,16 @@ pub async fn matmul32(
                 },
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
         ],
     });
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -94,7 +120,7 @@ pub async fn matmul32(
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: target_buffer.as_entire_binding(),
+                resource: lhs_buffer.as_entire_binding(),
             },
             wgpu::BindGroupEntry {
                 binding: 1,
@@ -102,7 +128,11 @@ pub async fn matmul32(
             },
             wgpu::BindGroupEntry {
                 binding: 2,
-                resource: x_dim_buffer.as_entire_binding(),
+                resource: dims_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: output_buffer.as_entire_binding(),
             },
         ],
     });
@@ -130,14 +160,14 @@ pub async fn matmul32(
         });
         compute_pass.set_pipeline(&compute_pipeline);
         compute_pass.set_bind_group(0, &bind_group, &[]);
-        compute_pass.dispatch_workgroups(dims.0 as u32, dims.1 as u32, 0);
+        compute_pass.dispatch_workgroups(out_dim.0 as u32, out_dim.1 as u32, 0);
     }
     command_encoder.copy_buffer_to_buffer(
-        &target_buffer,
+        &output_buffer,
         0,
         &output_staging_buffer,
         0,
-        target_buffer.size(),
+        output_buffer_size as wgpu::BufferAddress,
     );
     let submission_index = queue.submit([command_encoder.finish()]);
 
@@ -155,10 +185,10 @@ pub async fn matmul32(
     receiver.await??;
 
     let mapped_range = output_slice.get_mapped_range();
-    if let Some(mut_target_slice) = target.as_slice_mut() {
+    if let Some(mut_target_slice) = out.as_slice_mut() {
         mut_target_slice.copy_from_slice(bytemuck::cast_slice(&mapped_range));
     } else {
-        for (i, e) in target.iter_mut().enumerate() {
+        for (i, e) in out.iter_mut().enumerate() {
             *e = *bytemuck::from_bytes(&mapped_range[i..i + 4]);
         }
     }
