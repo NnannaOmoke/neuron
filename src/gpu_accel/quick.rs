@@ -47,8 +47,8 @@ pub async fn matmul32_extern(
         .expect("could not get device from wgpu adapter");
 
     // See docs for `utils::create_loaded_buffer`.
-    let lhs_buffer = create_loaded_buffer(&device, &lhs, false, "`matmul32` `lhs`").await?;
-    let rhs_buffer = create_loaded_buffer(&device, &rhs, false, "`matmul33` `rhs`").await?;
+    let lhs_buffer = create_loaded_buffer(&device, &lhs, "`matmul32` `lhs`").await?;
+    let rhs_buffer = create_loaded_buffer(&device, &rhs, "`matmul33` `rhs`").await?;
     let dims_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("neuron matmul32 input dims buffer"),
         contents: bytemuck::bytes_of(&[lhs.dim().0, lhs.dim().1, rhs.dim().0, rhs.dim().1]),
