@@ -11,7 +11,7 @@ pub enum Error {
     TokioOneshotChannelReveiveError(#[from] tokio::sync::oneshot::error::RecvError),
 }
 
-pub fn get_needed_buffer_size(item_count: usize) -> u64 {
+fn get_needed_buffer_size(item_count: usize) -> u64 {
     (item_count * size_of::<f32>()) as u64
 }
 
