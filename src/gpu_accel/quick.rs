@@ -46,6 +46,7 @@ pub async fn matmul32_extern(
         .await
         .expect("could not get device from wgpu adapter");
 
+    // See docs for `utils::create_loaded_buffer`.
     let lhs_buffer = create_loaded_buffer(&device, &lhs, false, "`matmul32` `lhs`").await?;
     let rhs_buffer = create_loaded_buffer(&device, &rhs, false, "`matmul33` `rhs`").await?;
     let dims_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

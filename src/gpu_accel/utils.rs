@@ -11,8 +11,8 @@ pub enum Error {
     TokioOneshotChannelReveiveError(#[from] tokio::sync::oneshot::error::RecvError),
 }
 
-pub fn get_needed_buffer_size(buffer_len: usize) -> u64 {
-    (buffer_len * size_of::<f32>()) as u64
+pub fn get_needed_buffer_size(item_count: usize) -> u64 {
+    (item_count * size_of::<f32>()) as u64
 }
 
 fn create_loadable_buffer(
@@ -48,6 +48,13 @@ pub async fn get_mapped_range_mut<'a>(
     Ok(buffer_slice.get_mapped_range_mut())
 }
 
+/// Alternative for wgpu::util::DeviceExt::create_buffer_init specialized for ndarray array views.
+///
+/// The issue with wgpu's `create_buffer_init` is that it only works for data from a slice.
+/// The issue with that is that ndarray `ArrayView`s can't always be converted to slices due to
+/// internal memory representation. This function allows us to effectively do the same as the
+/// provided convenince method but fall back to iterative copying if the `ArrayView` cannot be
+/// reborrowed as a slice.
 pub async fn create_loaded_buffer(
     device: &wgpu::Device,
     data: &ArrayView2<'_, f32>,
@@ -76,6 +83,7 @@ pub async fn create_loaded_buffer(
     Ok(buffer)
 }
 
+/// See docs for [`create_loaded_buffer`].
 pub async fn create_loaded_buffer_from_mut(
     device: &wgpu::Device,
     data: &ArrayViewMut2<'_, f32>,
