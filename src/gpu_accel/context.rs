@@ -140,7 +140,7 @@ impl WgpuPipelines {
             label: Some("Neuron matmul pipeline"),
             layout: Some(&matmul_layout),
             module: shaders.get_matmul(device),
-            entry_point: &SHADER_MAIN_NAME,
+            entry_point: SHADER_MAIN_NAME,
             compilation_options: wgpu::PipelineCompilationOptions::default(),
         });
 

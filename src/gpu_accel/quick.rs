@@ -39,7 +39,7 @@ fn matmul32_create_bind_group_and_pipeline(
     dims_buf: &wgpu::Buffer,
     output_buf: &wgpu::Buffer,
 ) -> (wgpu::BindGroup, wgpu::ComputePipeline) {
-    let shader_module = init_matmul(&device);
+    let shader_module = init_matmul(device);
 
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("neuron quick matmul32 bind group layout"),
