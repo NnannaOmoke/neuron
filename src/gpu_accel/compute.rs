@@ -83,28 +83,28 @@ impl<GpuCtxSrc: Borrow<GpuContext>> MatMulContext<GpuCtxSrc> {
         }
     }
 
-    /// TODO
-    ///
-    /// ## Panics
-    ///
-    /// Panics if the dimentions of `lhs_and_output` and `rhs` are not the same.
-    /// Also panics if the number of elements held in both of the matrices is not the
-    /// same as the number of elements the `DotContext` was created to work with.
-    ///
-    /// ## TODO
-    ///
-    /// Make this method work with matrices smaller than the max size held by the
-    /// context when the `DotContext`'s size is a maximum rather than an exact value.
-    pub async fn dot_in_place(
-        &self,
-        mut lhs_and_output: ArrayViewMut2<'_, f32>,
-        rhs: ArrayView2<'_, f32>,
-    ) -> Result<(), Error> {
-        assert_eq!(lhs_and_output.dim(), rhs.dim());
-        assert_eq!(rhs.len(), self.matrix_size);
+    // /// TODO
+    // ///
+    // /// ## Panics
+    // ///
+    // /// Panics if the dimentions of `lhs_and_output` and `rhs` are not the same.
+    // /// Also panics if the number of elements held in both of the matrices is not the
+    // /// same as the number of elements the `DotContext` was created to work with.
+    // ///
+    // /// ## TODO
+    // ///
+    // /// Make this method work with matrices smaller than the max size held by the
+    // /// context when the `DotContext`'s size is a maximum rather than an exact value.
+    // pub async fn dot_in_place(
+    //     &self,
+    //     mut lhs_and_output: ArrayViewMut2<'_, f32>,
+    //     rhs: ArrayView2<'_, f32>,
+    // ) -> Result<(), Error> {
+    //     assert_eq!(lhs_and_output.dim(), rhs.dim());
+    //     assert_eq!(rhs.len(), self.matrix_size);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }
 
 #[derive(Debug, thiserror::Error)]
