@@ -4,42 +4,82 @@ use std::{borrow::Borrow, ops::Deref};
 
 pub struct MatMulContext<GpuCtxPtr: Borrow<GpuContext>> {
     context_ptr: GpuCtxPtr,
-    lhs_dims: (usize, usize),
+    lhs_dim: (usize, usize),
     lhs_buf: wgpu::Buffer,
-    rhs_dims: (usize, usize),
+    lhs_staging_buf: wgpu::Buffer,
+    rhs_dim: (usize, usize),
     rhs_buf: wgpu::Buffer,
-    output_staging_buf: wgpu::Buffer,
+    // May not be needed if rhs is the same dim as lhs.
+    rhs_staging_buf: Option<wgpu::Buffer>,
     out_buf: wgpu::Buffer,
+    out_staging_buf: wgpu::Buffer,
 }
 
 impl<GpuCtxSrc: Borrow<GpuContext>> MatMulContext<GpuCtxSrc> {
-    pub fn new(gpu_context_ptr: GpuCtxSrc, ) -> Self {
-        let buffer_descriptor = wgpu::BufferDescriptor {
-            label: Some("neuron DotContext out buffer"),
-            size: (matrix_size_in_f32s * size_of::<f32>()) as u64,
-            usage: wgpu::BufferUsages::STORAGE,
+    pub fn new(
+        gpu_context_ptr: GpuCtxSrc,
+        lhs_dim: (usize, usize),
+        rhs_dim: (usize, usize),
+    ) -> Self {
+        let device = gpu_context_ptr.borrow().device();
+
+        let lhs_buf_size = (lhs_dim.0 * lhs_dim.1) as wgpu::BufferAddress;
+        let lhs_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("neuron MatMulContext lhs buffer"),
+            size: lhs_buf_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
+        });
+        let lhs_staging_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("neuron MatMulContext lhs staging buffer"),
+            size: lhs_buf_size,
+            usage: wgpu::BufferUsages::MAP_WRITE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let rhs_buf_size = (rhs_dim.0 * rhs_dim.1) as wgpu::BufferAddress;
+        let rhs_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("neuron MatMulContext rhs buffer"),
+            size: rhs_buf_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let rhs_staging_buf = if lhs_dim.0 == rhs_dim.0 && lhs_dim.1 == rhs_dim.1 {
+            Some(device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("neuron MatMulContext rhs staging buffer"),
+                size: rhs_buf_size,
+                usage: wgpu::BufferUsages::MAP_WRITE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            }))
+        } else {
+            None
         };
-        let lhs_buf = gpu_context_ptr
-            .borrow()
-            .device()
-            .create_buffer(&buffer_descriptor);
-        let rhs_buf = gpu_context_ptr
-            .borrow()
-            .device()
-            .create_buffer(&buffer_descriptor);
-        let output_staging_buf = gpu_context_ptr
-            .borrow()
-            .device()
-            .create_buffer(&buffer_descriptor);
+
+        let out_dim = (lhs_dim.0, rhs_dim.1);
+        let out_buf_size = (out_dim.0 * out_dim.1) as wgpu::BufferAddress;
+        let out_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("neuron MatMulContext output buffer"),
+            size: out_buf_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let out_staging_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("neuron MatMulContext output staging buffer"),
+            size: out_buf_size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
 
         Self {
             context_ptr: gpu_context_ptr,
-            matrix_size: matrix_size_in_f32s,
+            lhs_dim,
             lhs_buf,
+            lhs_staging_buf,
+            rhs_dim,
             rhs_buf,
-            output_staging_buf,
-            out_buf: None,
+            rhs_staging_buf,
+            out_buf,
+            out_staging_buf,
         }
     }
 
