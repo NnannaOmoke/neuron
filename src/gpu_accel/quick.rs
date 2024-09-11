@@ -213,6 +213,11 @@ pub async fn matmul32_extern(
     if let Some(mut_target_slice) = out.as_slice_mut() {
         mut_target_slice.copy_from_slice(bytemuck::cast_slice(&mapped_range));
     } else {
+        log::warn!(
+            "{} cannot be cast to slice (ndarray::ArrayView::to_slice_mut). \
+            Falling back in per-float insertion. This is significantly slower.",
+            out
+        );
         for (i, e) in out.iter_mut().enumerate() {
             *e = *bytemuck::from_bytes(&mapped_range[i..i + 4]);
         }
@@ -306,6 +311,11 @@ pub async fn matmul32_in_place_lhs(
     if let Some(mut_target_slice) = lhs.as_slice_mut() {
         mut_target_slice.copy_from_slice(bytemuck::cast_slice(&mapped_range));
     } else {
+        log::warn!(
+            "{} cannot be cast to slice (ndarray::ArrayView::to_slice_mut). \
+            Falling back in per-float insertion. This is significantly slower.",
+            lhs
+        );
         for (i, e) in lhs.iter_mut().enumerate() {
             *e = *bytemuck::from_bytes(&mapped_range[i..i + 4]);
         }
