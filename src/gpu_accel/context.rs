@@ -1,6 +1,6 @@
 pub use wgpu::InstanceDescriptor;
 
-use super::shaders::{SHADER_MAIN_NAME, Shaders};
+use super::shaders::{Shaders, SHADER_MAIN_NAME};
 use log::{debug, info, trace};
 use std::{fmt::Debug, path::Path, sync::OnceLock};
 use thiserror::Error;
@@ -100,8 +100,7 @@ impl GpuContext {
 }
 
 pub struct WgpuPipelines {
-    dot_in_place: wgpu::ComputePipeline,
-    dot_extern: wgpu::ComputePipeline,
+    matmul: wgpu::ComputePipeline,
 }
 
 impl WgpuPipelines {
@@ -118,9 +117,9 @@ impl WgpuPipelines {
                 count: None,
             };
 
-        let dot_in_place_bind_group_layout =
+        let matmul_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Neuron dot-in-place binding layout"),
+                label: Some("Neuron matmul binding layout"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
@@ -132,56 +131,20 @@ impl WgpuPipelines {
                     },
                 ],
             });
-        let dot_in_place_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Neuron dot-in-place layout"),
-            bind_group_layouts: &[&dot_in_place_bind_group_layout],
+        let matmul_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Neuron matmul layout"),
+            bind_group_layouts: &[&matmul_bind_group_layout],
             push_constant_ranges: &[],
         });
-        let dot_in_place =
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("Neuron dot-in-place pipeline"),
-                layout: Some(&dot_in_place_layout),
-                module: shaders.get_dot_in_place(device),
-                entry_point: &SHADER_MAIN_NAME,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            });
-
-        let dot_extern_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Neuron dot-in-place binding layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        ..BUFFER_BIND_GROUP_LAYOUT_ENTRY_DEFAULT
-                    },
-                ],
-            });
-        let dot_extern_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Neuron dot-in-place layout"),
-            bind_group_layouts: &[&dot_extern_bind_group_layout],
-            push_constant_ranges: &[],
+        let matmul = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Neuron matmul pipeline"),
+            layout: Some(&matmul_layout),
+            module: shaders.get_matmul(device),
+            entry_point: &SHADER_MAIN_NAME,
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
         });
-        let dot_extern =
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("Neuron dot-extern pipeline"),
-                layout: Some(&dot_extern_layout),
-                module: shaders.get_dot_in_place(device),
-                entry_point: &SHADER_MAIN_NAME,
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            });
 
-        Self {
-            dot_in_place,
-            dot_extern,
-        }
+        Self { matmul }
     }
 }
 

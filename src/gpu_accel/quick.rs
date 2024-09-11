@@ -2,7 +2,7 @@
 
 use crate::gpu_accel::utils::{create_loaded_buffer, create_loaded_buffer_from_mut};
 
-use super::{shaders::init_dot_in_place, utils};
+use super::{shaders::init_matmul, utils};
 use ndarray::{Array2, ArrayView2, ArrayViewMut2};
 use std::{mem::size_of, sync::Arc};
 use thiserror::Error;
@@ -39,7 +39,7 @@ fn matmul32_create_bind_group_and_pipeline(
     dims_buf: &wgpu::Buffer,
     output_buf: &wgpu::Buffer,
 ) -> (wgpu::BindGroup, wgpu::ComputePipeline) {
-    let shader_module = init_dot_in_place(&device);
+    let shader_module = init_matmul(&device);
 
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("neuron quick matmul32 bind group layout"),
