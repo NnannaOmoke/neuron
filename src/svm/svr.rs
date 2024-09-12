@@ -80,8 +80,8 @@ impl RawSVR {
             return false;
         }
         let alpha_one = self.alphas[i1];
-        let alpha_one_star = self.alpha_stars[i2];
-        let alpha_two = self.alphas[i1];
+        let alpha_one_star = self.alpha_stars[i1];
+        let alpha_two = self.alphas[i2];
         let alpha_two_star = self.alpha_stars[i2];
 
         let error_one = error[i1];
@@ -91,8 +91,10 @@ impl RawSVR {
         let k12 = cache.get([i1, i2].into(), self);
         let k22 = cache.get([i2, i2].into(), self);
         let eta = 2f64 * k12 - k11 - k22;
+        assert!(eta < 0f64);
         let gamma = (alpha_one - alpha_one_star) + (alpha_two - alpha_two_star);
-        let [mut case1, mut case2, mut case3, mut case4, mut finished] = [0; 5];
+        let [mut case1, mut case2, mut case3, mut case4] = [0; 4];
+        let mut finished = false;
         //cold storage for the current, but changeable alpha values
         let alpha_one_old = alpha_one;
         let alpha_two_old = alpha_two;
@@ -108,8 +110,7 @@ impl RawSVR {
                 false
             }
         }
-
-        while finished == 0 {
+        while !finished {
             if case1 == 0
                 && (alpha_one > 0f64 || (alpha_one_star == 0f64 && delta_phi > 0f64))
                 && (alpha_two > 0f64 || (alpha_two_star == 0f64 && delta_phi < 0f64))
@@ -123,20 +124,20 @@ impl RawSVR {
                     alpha_two_new = alpha_two_new.max(lower);
                     let alpha_one_new = alpha_one - (alpha_two_new - alpha_two);
                     if change(self.eps, alpha_one, alpha_one_new)
-                        && change(self.eps, alpha_two, alpha_two_new)
+                        || change(self.eps, alpha_two, alpha_two_new)
                     {
                         self.alphas[i1] = alpha_one_new;
                         self.alphas[i2] = alpha_two_new;
                     } else {
-                        finished = 1;
+                        finished = true;
                     }
                 } else {
-                    finished = 1;
+                    finished = true;
                 }
                 case1 = 1;
             } else if case2 == 0
                 && (alpha_one > 0f64 || (alpha_one_star == 0f64 && delta_phi > 2f64 * self.eps))
-                && (alpha_two_star > 0f64 || (alpha_two == 0f64 && delta_phi < 2f64 * self.eps))
+                && (alpha_two_star > 0f64 || (alpha_two == 0f64 && delta_phi > 2f64 * self.eps))
             {
                 let lower = 0f64.max(gamma);
                 let upper = self.C.min(self.C + gamma);
@@ -147,15 +148,15 @@ impl RawSVR {
                     alpha_two_new = alpha_two_new.max(lower);
                     let alpha_one_new = alpha_one + (alpha_two_new - alpha_two_star);
                     if change(self.eps, alpha_one, alpha_one_new)
-                        && change(self.eps, alpha_two_star, alpha_two_new)
+                        || change(self.eps, alpha_two_star, alpha_two_new)
                     {
                         self.alphas[i1] = alpha_one_new;
                         self.alpha_stars[i2] = alpha_two_new;
                     } else {
-                        finished = 1;
+                        finished = true;
                     }
                 } else {
-                    finished = 1;
+                    finished = true;
                 }
                 case2 = 1;
             } else if case3 == 0
@@ -176,10 +177,10 @@ impl RawSVR {
                         self.alpha_stars[i1] = alpha_one_new;
                         self.alphas[i2] = alpha_two_new;
                     } else {
-                        finished = 1;
+                        finished = true;
                     }
                 } else {
-                    finished = 1;
+                    finished = true;
                 }
                 case3 = 1;
             } else if case4 == 0
@@ -193,17 +194,18 @@ impl RawSVR {
                     let mut alpha_two_new = alpha_two_star + delta_phi / eta;
                     alpha_two_new = alpha_two_new.min(upper);
                     alpha_two_new = alpha_two_new.max(lower);
-                    let alpha_one_new = alpha_one_star + (alpha_two_new - alpha_two_star);
+                    let alpha_one_new = alpha_one_star - (alpha_two_new - alpha_two_star);
                     if change(self.eps, alpha_one_star, alpha_one_new)
-                        && change(self.eps, alpha_two_star, alpha_two_new)
+                        || change(self.eps, alpha_two_star, alpha_two_new)
                     {
+                        dbg!("we got here once!");
                         self.alpha_stars[i1] = alpha_one_new;
-                        self.alphas[i2] = alpha_two_new;
+                        self.alpha_stars[i2] = alpha_two_new;
                     } else {
-                        finished = 1;
+                        finished = true;
                     }
                 } else {
-                    finished = 1;
+                    finished = true;
                 }
                 case4 = 1;
             }
@@ -215,6 +217,7 @@ impl RawSVR {
                         - (alpha_one_old - alpha_one_star_old));
         }
         //updating the bias term
+        //we'll have to rewrite this, SMH
         let b1 = self.bias
             + error_one
             + self.support_labels[i1]
@@ -261,12 +264,15 @@ impl RawSVR {
             b2_star
         } else {
             //just because, honestly
-            let arr = [b1, b2, b1_star, b2_star];
-            let min = arr.iter().fold(0f64, |left, &right| f64::min(left, right));
-            let max = arr.iter().fold(0f64, |left, &right| f64::max(left, right));
-            (min + max) * 0.5
+            (b1 + b2) * 0.5
         };
 
+        if (0f64 < self.alphas[i1]) && (self.alphas[i1] < self.C) {
+            error[i1] = 0f64;
+        }
+        if (0f64 < self.alphas[i2]) && (self.alphas[i2] < self.C) {
+            error[i2] = 0f64;
+        }
         //no we've update bias, next step is to update the error cache
         let non_optimized = (0..self.support_vectors.nrows())
             .filter(|&index| index != i2 && index != i1)
@@ -280,8 +286,10 @@ impl RawSVR {
                         - (self.alpha_stars[i2] - alpha_two_star_old))
                     * cache.get([i2, opt].into(), self)
                 + (self.bias - bias);
+
             error[opt] += val;
         });
+        self.bias = bias;
         true
     }
 
@@ -341,7 +349,7 @@ impl RawSVR {
         false
     }
 
-    fn binary_fit(&mut self, features: ArrayView2<f64>, labels: ArrayView1<f64>) {
+    fn fit(&mut self, features: ArrayView2<f64>, labels: ArrayView1<f64>) {
         let (nrows, ncols) = (features.nrows(), features.ncols());
         self.support_vectors = features.to_owned();
         self.support_labels = labels.to_owned();
@@ -349,12 +357,19 @@ impl RawSVR {
         self.alpha_stars = Array1::from_elem(nrows, 0f64);
         let mut cache = KernelCache::new_from_feature_size(features);
         let mut errors = self.predict(features) - self.support_labels.view();
+
         let mut count = 0;
         let mut examined = true;
         let mut loop_counter = 0;
         let mut minimum_changed;
         while count > 0 || examined {
             loop_counter += 1;
+            if loop_counter == 50 && self.alphas.sum() == 0f64 {
+                dbg!(self.alphas.view());
+                dbg!(self.alpha_stars.view());
+                dbg!(errors.view());
+                panic!()
+            }
             count = 0;
             if examined {
                 for i2 in 0..nrows {
@@ -384,27 +399,25 @@ impl RawSVR {
             } else if count < minimum_changed as i32 {
                 examined = true;
             }
-
-            let support_indices = self
-                .alphas
-                .iter()
-                .enumerate()
-                .filter(|(_, alpha)| **alpha != 0f64)
-                .map(|(index, _)| index)
-                .collect::<Vec<usize>>();
-            self.support_labels = Array1::from_shape_fn(support_indices.len(), |x| {
-                self.support_labels[support_indices[x]]
-            });
-            self.support_vectors =
-                Array2::from_shape_fn((support_indices.len(), ncols), |(x, y)| {
-                    self.support_vectors[(support_indices[x], y)]
-                });
-            self.alphas =
-                Array1::from_shape_fn(support_indices.len(), |x| self.alphas[support_indices[x]]);
-            self.alpha_stars = Array1::from_shape_fn(support_indices.len(), |x| {
-                self.alpha_stars[support_indices[x]]
-            });
         }
+        let support_indices = self
+            .alphas
+            .iter()
+            .enumerate()
+            .filter(|(_, alpha)| **alpha != 0f64)
+            .map(|(index, _)| index)
+            .collect::<Vec<usize>>();
+        self.support_labels = Array1::from_shape_fn(support_indices.len(), |x| {
+            self.support_labels[support_indices[x]]
+        });
+        self.support_vectors = Array2::from_shape_fn((support_indices.len(), ncols), |(x, y)| {
+            self.support_vectors[(support_indices[x], y)]
+        });
+        self.alphas =
+            Array1::from_shape_fn(support_indices.len(), |x| self.alphas[support_indices[x]]);
+        self.alpha_stars = Array1::from_shape_fn(support_indices.len(), |x| {
+            self.alpha_stars[support_indices[x]]
+        });
     }
 
     fn predict(&self, data: ArrayView2<f64>) -> Array1<f64> {
@@ -500,7 +513,7 @@ impl SVRBuilder {
 
     fn internal_fit(&mut self) {
         let (features, labels) = self.data.get_train();
-        self.svr.binary_fit(features, labels);
+        self.svr.fit(features, labels);
     }
 
     fn predict(&self, data: ArrayView2<f64>) -> Array1<f64> {
@@ -533,6 +546,30 @@ impl std::fmt::Display for SVRBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        base_array::BaseDataset,
+        utils::metrics::{accuracy, root_mean_square_error},
+    };
+    use std::path::Path;
+
     #[test]
-    fn test_convergence_svr() {}
+    fn test_convergence_svr() {
+        let dataset = BaseDataset::from_csv(
+            Path::new("src/base_array/test_data/boston.csv"),
+            true,
+            true,
+            b',',
+        )
+        .unwrap();
+
+        let mut svr = SVRBuilder::new()
+            .kernel(SVMKernel::Linear)
+            .set_c(100f64)
+            .set_eps(1e-3)
+            .scaler(ScalerState::MinMax)
+            .strategy(TrainTestSplitStrategy::TrainTest(0.7));
+        svr.fit(&dataset, "MEDV");
+        let result = svr.evaluate(root_mean_square_error);
+        dbg!(result[0]);
+    }
 }

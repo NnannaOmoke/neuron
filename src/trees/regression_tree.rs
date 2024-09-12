@@ -311,6 +311,10 @@ impl RegressionTreeBuilder {
         let preds = self.predict(features);
         function(ground_truth, preds.view())
     }
+
+    pub fn raw_mut(&mut self) -> &mut RawRegressionTree {
+        &mut self.tree
+    }
 }
 impl RegressionTreeNode {
     fn predict(&self, data: ArrayView1<f64>) -> f64 {
@@ -362,7 +366,6 @@ mod tests {
         let mut tree =
             RegressionTreeBuilder::new().strategy(TrainTestSplitStrategy::TrainTest(0.7));
         tree.fit(&dataset, "MEDV");
-        tree.display();
         //let rmse = tree.evaluate(root_mean_square_error);
         //dbg!(rmse);
     }

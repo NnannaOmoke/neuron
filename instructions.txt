@@ -1,0 +1,19 @@
+STEP ONE:
+Install python on your PC by going to https://python.org/downloads
+Go for the linux x86-64 version of python 3.11
+STEP TWO:
+Make a folder for the work, name it whatever you'd want it to be 
+STEP THREE:
+run the command: 
+`pip install pytrends`
+`pip install pandas`
+`pip install matplotlib`
+STEP FOUR:
+create a new python script, start it by importing your packages
+import pytrends
+#next thing to do is to manually get the election dates and store them as a list of strings
+election_dates = ["25th February, 2023"]
+geo = "NG"
+timeframe = "2024-02-06 2024-03-03"
+data = pytrends.trending_searches(geo, timeframe = timeframe)
+

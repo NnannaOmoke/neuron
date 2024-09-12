@@ -1,20 +1,23 @@
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 use rand::Rng;
 
-use crate::{base_array::BaseDataset, utils::model_selection::{TrainTestSplitStrategy, TrainTestSplitStrategyData}};
+use crate::{
+    base_array::BaseDataset,
+    utils::model_selection::{TrainTestSplitStrategy, TrainTestSplitStrategyData},
+};
 
 use super::classification_tree::RawClassificationTree;
 
 pub enum MaxFeatureMode {
     Log,
-    Sqrt
+    Sqrt,
 }
 pub struct RandomForestClassifier {
     num_estimators: usize,
     trees: Vec<RawClassificationTree>,
     strategy: TrainTestSplitStrategy,
     data: TrainTestSplitStrategyData<f64, u32>,
-    max_feature_mode: MaxFeatureMode
+    max_feature_mode: MaxFeatureMode,
 }
 
 impl RandomForestClassifier {
@@ -24,21 +27,26 @@ impl RandomForestClassifier {
             trees: vec![RawClassificationTree::default(); num_estimators],
             strategy: TrainTestSplitStrategy::default(),
             data: TrainTestSplitStrategyData::default(),
-            max_feature_mode: MaxFeatureMode::Log
+            max_feature_mode: MaxFeatureMode::Log,
         }
     }
     pub fn strategy(self, strategy: TrainTestSplitStrategy) -> Self {
-        RandomForestClassifier {
-            strategy,
-            ..self
-        }
+        RandomForestClassifier { strategy, ..self }
     }
-    pub fn bootstrap(features: ArrayView2<f64>, labels: ArrayView1<u32>, max_features: usize) -> (Array2<f64>, Array1<u32>) {
+    pub fn bootstrap(
+        features: ArrayView2<f64>,
+        labels: ArrayView1<u32>,
+        max_features: usize,
+    ) -> (Array2<f64>, Array1<u32>) {
         let mut b_indices = vec![0usize; features.nrows()];
         let mut b_features = vec![0usize; max_features];
         let mut rng = rand::thread_rng();
-        b_indices.iter_mut().for_each(|index| *index = rng.gen_range(0..features.nrows())); 
-        b_features.iter_mut().for_each(|feature| *feature = rng.gen_range(0..features.ncols()));
+        b_indices
+            .iter_mut()
+            .for_each(|index| *index = rng.gen_range(0..features.nrows()));
+        b_features
+            .iter_mut()
+            .for_each(|feature| *feature = rng.gen_range(0..features.ncols()));
 
         let mut out_features = Array2::<f64>::default((b_indices.len(), b_features.len()));
         let mut out_labels = Array1::<u32>::default(b_indices.len());
@@ -57,7 +65,6 @@ impl RandomForestClassifier {
         let target = dataset._get_string_index(target);
         self.data = TrainTestSplitStrategyData::<f64, u32>::new_c(dataset, target, self.strategy);
         self.internal_fit();
-        
     }
     fn internal_fit(&mut self) {
         let (features, labels) = self.data.get_train();
@@ -66,7 +73,8 @@ impl RandomForestClassifier {
             MaxFeatureMode::Sqrt => usize::max(f64::sqrt(features.ncols() as f64) as usize, 1),
         };
         for tree in &mut self.trees {
-            let (bootstrap_features, bootstrap_labels) = Self::bootstrap(features, labels, max_features);
+            let (bootstrap_features, bootstrap_labels) =
+                Self::bootstrap(features, labels, max_features);
             tree.fit(bootstrap_features.view(), bootstrap_labels.view());
         }
     }
@@ -92,19 +100,23 @@ impl RandomForestClassifier {
         });
         highest_occurence.0
     }
+
     pub fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
-        let mut results = Array2::<u32>::default((data.nrows(), 0));
-        for tree in &self.trees {
-            results.push_row(tree.predict(data).view());
-        }
-        let mut end_result = Array1::<u32>::default(data.nrows());
-        let mut idx = 0;
-        for result in results.rows() {
-            end_result[idx] = Self::vote(result);
-            idx += 1;
-        }
-        end_result
+        let mut results = Array2::default((data.nrows(), self.trees.len()));
+        self.trees.iter().enumerate().for_each(|(index, tree)| {
+            results.row_mut(index).assign(&tree.predict(data).view());
+        });
+        let mut result = Array1::default(data.nrows());
+        results
+            .rows()
+            .into_iter()
+            .enumerate()
+            .for_each(|(index, res_row)| {
+                result[index] = Self::vote(res_row);
+            });
+        result
     }
+
     pub fn evaluate<F>(&self, function: F) -> Vec<f64>
     where
         F: Fn(ArrayView1<u32>, ArrayView1<u32>) -> Vec<f64>,
@@ -121,4 +133,3 @@ impl RandomForestClassifier {
         function(ground_truth, preds.view())
     }
 }
-

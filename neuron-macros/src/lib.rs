@@ -23,8 +23,8 @@ pub fn dtype(input: TokenStream) -> TokenStream {
         }
         Lit::Int(val) => {
             //find if it's negative, if it is, make it float, else unsigned int
-            let value = val.base10_parse::<i64>().unwrap();
-            if value < 0 {
+            let value = val.base10_parse::<f64>().unwrap();
+            if value < 0f64 {
                 quote! {
                     ::neuron::dtype::DType::F64(#value as f64)
                 }
@@ -232,3 +232,34 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
     res.into()
 }
+
+// #[proc_macro_derive(CrossValidatorTwo, attributes(expand, validate))]
+// pub fn derive_two(input: TokenStream) -> TokenStream {
+//     let struct_input = parse_macro_input!(input as DeriveInput);
+//     let name = &struct_input.ident;
+//     let validator_name = format!("{}Validator", name);
+//     let original_fields = if let syn::Data::Struct(syn::DataStruct {
+//         fields: syn::Fields::Named(syn::FieldsNamed { ref named, .. }),
+//         ..
+//     }) = struct_input.data
+//     {
+//         named
+//     } else {
+//         unimplemented!()
+//     };
+//     let estimator = if let Some(est) = original_fields.iter().find(|&f| {
+//         f.attrs.iter().any(|f| {
+//             if *f.path().get_ident().unwrap() == Ident::new("expand", struct_input.span()){
+//                 true
+//             } else {
+//                 false
+//             }
+//         })
+//     }) {
+//         est
+//     } else {
+//         panic!("No field is being expanded for validation")
+//     };
+//     let estimator_fields
+//     quote! {}.into()
+// }
