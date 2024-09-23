@@ -185,7 +185,7 @@ pub async fn matmul32_extern(
         });
         compute_pass.set_pipeline(&compute_pipeline);
         compute_pass.set_bind_group(0, &bind_group, &[]);
-        compute_pass.dispatch_workgroups(out_dim.0 as u32, out_dim.1 as u32, 0);
+        compute_pass.dispatch_workgroups(out_dim.0 as u32, out_dim.1 as u32, 1);
     }
     command_encoder.copy_buffer_to_buffer(
         &output_buffer,
@@ -194,7 +194,7 @@ pub async fn matmul32_extern(
         0,
         output_buffer_size as wgpu::BufferAddress,
     );
-    let submission_index = queue.submit([command_encoder.finish()]);
+    queue.submit([command_encoder.finish()]);
 
     let output_slice = output_staging_buffer.slice(..);
 
@@ -205,7 +205,7 @@ pub async fn matmul32_extern(
             .expect("failed to send buffer mapping result through channel")
     });
     device
-        .poll(wgpu::Maintain::WaitForSubmissionIndex(submission_index))
+        .poll(wgpu::Maintain::Wait)
         .panic_on_timeout();
     receiver.await??;
 
@@ -222,6 +222,9 @@ pub async fn matmul32_extern(
             *e = *bytemuck::from_bytes(&mapped_range[i..i + 4]);
         }
     }
+    // Probably not necessary but the hello_compute example includes these lines.
+    drop(mapped_range);
+    output_staging_buffer.unmap();
 
     Ok(())
 }
