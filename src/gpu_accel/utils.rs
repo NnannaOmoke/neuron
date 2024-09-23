@@ -24,22 +24,6 @@ fn create_loadable_buffer(device: &wgpu::Device, data_len: usize) -> wgpu::Buffe
     })
 }
 
-pub async fn get_mapped_range_mut<'a>(
-    device: &wgpu::Device,
-    buffer: &'a wgpu::Buffer,
-) -> Result<wgpu::BufferViewMut<'a>, Error> {
-    let buffer_slice = buffer.slice(..);
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    buffer_slice.map_async(wgpu::MapMode::Write, move |r| {
-        sender
-            .send(r)
-            .expect("failed to send buffer mapping result through channel")
-    });
-    device.poll(wgpu::Maintain::Poll);
-    receiver.await??;
-    Ok(buffer_slice.get_mapped_range_mut())
-}
-
 /// Alternative for wgpu::util::DeviceExt::create_buffer_init specialized for ndarray array views.
 ///
 /// The issue with wgpu's `create_buffer_init` is that it only works for data from a slice.
@@ -54,7 +38,7 @@ pub async fn create_loaded_buffer(
 ) -> Result<wgpu::Buffer, Error> {
     let buffer = create_loadable_buffer(device, data.len());
 
-    let mut buffer_view_mut = get_mapped_range_mut(device, &buffer).await?;
+    let mut buffer_view_mut = buffer.slice(..).get_mapped_range_mut();
     if let Some(data_slice) = data.as_slice() {
         buffer_view_mut.copy_from_slice(bytemuck::cast_slice(data_slice));
     } else {
@@ -81,7 +65,7 @@ pub async fn create_loaded_buffer_from_mut(
 ) -> Result<wgpu::Buffer, Error> {
     let buffer = create_loadable_buffer(device, data.len());
 
-    let mut buffer_view_mut = get_mapped_range_mut(device, &buffer).await?;
+    let mut buffer_view_mut = buffer.slice(..).get_mapped_range_mut();
     if let Some(data_slice) = data.as_slice() {
         buffer_view_mut.copy_from_slice(bytemuck::cast_slice(data_slice));
     } else {
