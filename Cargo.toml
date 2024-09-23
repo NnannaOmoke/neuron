@@ -24,8 +24,8 @@ prettytable = "0.10.0"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 thiserror = "1.0.58"
-# TODO: Make this as togglable as possible; `macros` features is only needed for testing.
-tokio = { version = "1.37.0", features = ["sync", "macros"] }
+# TODO: Make this as togglable as possible; `macros` and `rt` features is only needed for testing.
+tokio = { version = "1.37.0", features = ["sync", "macros", "rt"] }
 
 # gpu_accel deps
 bytemuck = { version = "1.15", optional = true }
