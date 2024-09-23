@@ -323,3 +323,22 @@ pub async fn matmul32_in_place_lhs(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ndarray::Array2;
+
+    #[tokio::test]
+    async fn matmul32_extern_same_size_small() {
+        let lhs = Array2::from_shape_fn((3, 3), |(x, y)| (x + y * 3) as f32);
+        let rhs = Array2::from_shape_fn((3, 3), |(_, y)| (y + 1) as f32);
+        let mut target = Array2::from_elem((3, 3), 0.0);
+
+        matmul32_extern(lhs.view(), rhs.view(), target.view_mut())
+            .await
+            .expect("failed to execute matmul32_extern");
+
+        assert_eq!(target.view(), lhs.dot(&rhs).view());
+    }
+}
