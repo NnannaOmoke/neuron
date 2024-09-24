@@ -185,6 +185,7 @@ pub async fn matmul32_extern(
         });
         compute_pass.set_pipeline(&compute_pipeline);
         compute_pass.set_bind_group(0, &bind_group, &[]);
+        compute_pass.insert_debug_marker("neuron begin compute matmul32_extern");
         compute_pass.dispatch_workgroups(out_dim.0 as u32, out_dim.1 as u32, 1);
     }
     command_encoder.copy_buffer_to_buffer(
@@ -204,9 +205,7 @@ pub async fn matmul32_extern(
             .send(r)
             .expect("failed to send buffer mapping result through channel")
     });
-    device
-        .poll(wgpu::Maintain::Wait)
-        .panic_on_timeout();
+    device.poll(wgpu::Maintain::Wait).panic_on_timeout();
     receiver.await??;
 
     let mapped_range = output_slice.get_mapped_range();
@@ -286,6 +285,7 @@ pub async fn matmul32_in_place_lhs(
         });
         compute_pass.set_pipeline(&compute_pipeline);
         compute_pass.set_bind_group(0, &bind_group, &[]);
+        compute_pass.insert_debug_marker("neuron begin compute matmul32_in_place_lhs");
         compute_pass.dispatch_workgroups(lhs_dim.0 as u32, lhs_dim.1 as u32, 0);
     }
     command_encoder.copy_buffer_to_buffer(
@@ -295,7 +295,7 @@ pub async fn matmul32_in_place_lhs(
         0,
         output_buffer_size as wgpu::BufferAddress,
     );
-    let submission_index = queue.submit([command_encoder.finish()]);
+    queue.submit([command_encoder.finish()]);
 
     let output_slice = output_staging_buf.slice(..);
 
@@ -305,9 +305,7 @@ pub async fn matmul32_in_place_lhs(
             .send(r)
             .expect("failed to send buffer mapping result through channel")
     });
-    device
-        .poll(wgpu::Maintain::WaitForSubmissionIndex(submission_index))
-        .panic_on_timeout();
+    device.poll(wgpu::Maintain::Wait).panic_on_timeout();
     receiver.await??;
 
     let mapped_range = output_slice.get_mapped_range();
@@ -334,6 +332,10 @@ mod tests {
 
     #[tokio::test]
     async fn matmul32_extern_same_size_small() {
+        env_logger::builder()
+            .filter_level(log::LevelFilter::Debug)
+            .init();
+
         let lhs = Array2::from_shape_fn((3, 3), |(x, y)| (x + y * 3) as f32);
         let rhs = Array2::from_shape_fn((3, 3), |(_, y)| (y + 1) as f32);
         let mut target = Array2::from_elem((3, 3), 0.0);

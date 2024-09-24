@@ -34,3 +34,6 @@ wgpu = { version = "0.20.1", optional = true }
 
 [dev-dependencies]
 criterion = "0.3"
+# TODO: This is only for tests so remove from non-test debug builds.
+env_logger = "0.11.5"
+log = "0.4.22"
