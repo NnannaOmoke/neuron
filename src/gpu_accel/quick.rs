@@ -150,7 +150,12 @@ pub async fn matmul32_extern(
     let rhs_buffer = create_loaded_buffer(&device, &rhs, "`matmul33_extern` `rhs`").await?;
     let dims_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("neuron matmul32 input dims buffer"),
-        contents: bytemuck::bytes_of(&[lhs.dim().0, lhs.dim().1, rhs.dim().0, rhs.dim().1]),
+        contents: bytemuck::bytes_of(&[
+            lhs.dim().0 as u32,
+            lhs.dim().1 as u32,
+            rhs.dim().0 as u32,
+            rhs.dim().1 as u32,
+        ]),
         usage: wgpu::BufferUsages::UNIFORM,
     });
     let output_buffer_size = (out_dim.0 * out_dim.1 * size_of::<f32>()) as wgpu::BufferAddress;
@@ -213,7 +218,7 @@ pub async fn matmul32_extern(
         mut_target_slice.copy_from_slice(bytemuck::cast_slice(&mapped_range));
     } else {
         log::warn!(
-            "{} cannot be cast to slice (ndarray::ArrayView::to_slice_mut). \
+            "{:?} cannot be cast to slice (ndarray::ArrayView::to_slice_mut). \
             Falling back in per-float insertion. This is significantly slower.",
             out
         );
@@ -332,9 +337,9 @@ mod tests {
 
     #[tokio::test]
     async fn matmul32_extern_same_size_small() {
-        env_logger::builder()
-            .filter_level(log::LevelFilter::Debug)
-            .init();
+        // env_logger::builder()
+        //     .filter_level(log::LevelFilter::Debug)
+        //     .init();
 
         let lhs = Array2::from_shape_fn((3, 3), |(x, y)| (x + y * 3) as f32);
         let rhs = Array2::from_shape_fn((3, 3), |(_, y)| (y + 1) as f32);
