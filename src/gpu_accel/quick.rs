@@ -41,72 +41,52 @@ fn matmul32_create_bind_group_and_pipeline(
 ) -> (wgpu::BindGroup, wgpu::ComputePipeline) {
     let shader_module = init_matmul(device);
 
+    const LAYOUT_ENTRY_TEMPLATE: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
+        binding: 0,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only: true },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    };
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("neuron quick matmul32 bind group layout"),
         entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
+            LAYOUT_ENTRY_TEMPLATE,
             wgpu::BindGroupLayoutEntry {
                 binding: 1,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
+                ..LAYOUT_ENTRY_TEMPLATE
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 2,
-                visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
-                count: None,
+                ..LAYOUT_ENTRY_TEMPLATE
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 3,
-                visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Storage { read_only: false },
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
-                count: None,
+                ..LAYOUT_ENTRY_TEMPLATE
             },
         ],
     });
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("neuron quick matmul32 bind group"),
         layout: &bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: lhs_buf.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: rhs_buf.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: dims_buf.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 3,
-                resource: output_buf.as_entire_binding(),
-            },
-        ],
+        // Trust me this is by _far_ the most elegant way of doing this; [T; N].map does not give an index.
+        entries: &core::array::from_fn::<_, 4, _>(|i| wgpu::BindGroupEntry {
+            binding: i as u32,
+            resource: [lhs_buf, rhs_buf, dims_buf, output_buf][i].as_entire_binding(),
+        }),
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -119,7 +99,7 @@ fn matmul32_create_bind_group_and_pipeline(
         layout: Some(&pipeline_layout),
         module: &shader_module,
         entry_point: "main",
-        compilation_options: wgpu::PipelineCompilationOptions::default(),
+        compilation_options: Default::default(),
     });
 
     (bind_group, compute_pipeline)
