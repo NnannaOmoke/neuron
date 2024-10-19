@@ -315,15 +315,58 @@ mod tests {
     use super::*;
     use ndarray::Array2;
 
+    const UNINIT_U32: u32 = 0xaa_aa_aa_aa;
+    // On usize::BITS == 32 systems, this should truncate and equal UNINIT_U32.
+    const UNINIT_USIZE: usize = 0xaa_aa_aa_aa_aa_aa_aa_aa as usize;
+    const UNINIT_F32: f32 = f32::from_bits(UNINIT_U32);
+
     #[tokio::test]
     async fn matmul32_extern_same_size_small() {
+        const SIZE: usize = 3;
+
         // env_logger::builder()
         //     .filter_level(log::LevelFilter::Debug)
         //     .init();
 
-        let lhs = Array2::from_shape_fn((3, 3), |(x, y)| (x + y * 3) as f32);
-        let rhs = Array2::from_shape_fn((3, 3), |(_, y)| (y + 1) as f32);
-        let mut target = Array2::from_elem((3, 3), 0.0);
+        let lhs = Array2::from_shape_fn((SIZE, SIZE), |(x, y)| (x + y * 3) as f32);
+        let rhs = Array2::from_shape_fn((SIZE, SIZE), |(_, y)| (y + 1) as f32);
+        let mut target = Array2::from_elem((SIZE, SIZE), UNINIT_F32);
+
+        matmul32_extern(lhs.view(), rhs.view(), target.view_mut())
+            .await
+            .expect("failed to execute matmul32_extern");
+
+        assert_eq!(target.view(), lhs.dot(&rhs).view());
+    }
+
+    #[tokio::test]
+    async fn matmul32_extern_large_numbers() {
+        // It seems that there is some imprecision between matmul32 and dot.
+        // On my machine, going too far above SIZE == 30 risks some numbers deviating at roughly
+        // the 5-7th decimal sigfig and thus the test failing.
+        // This obviously warrents further investigating.
+        const SIZE: usize = 30;
+
+        let lhs = Array2::from_shape_fn((SIZE, SIZE), |(x, y)| (x + y + 1) as f32);
+        let rhs = Array2::from_shape_fn((SIZE, SIZE), |(x, y)| (x.pow(2) * y) as f32);
+        let mut target = Array2::from_elem((SIZE, SIZE), UNINIT_F32);
+
+        matmul32_extern(lhs.view(), rhs.view(), target.view_mut())
+            .await
+            .expect("failed to execute matmul32_extern");
+
+        assert_eq!(target.view(), lhs.dot(&rhs).view());
+    }
+
+    #[tokio::test]
+    async fn matmul32_extern_same_size_large_mats() {
+        const SIZE: usize = 2048;
+
+        // These numbers are tuned such that even with 2048x2048 matrices, the numbers generated
+        // will not be large enough to cause the issue tested by matmul32_extern_large_numbers.
+        let lhs = Array2::from_shape_simple_fn((SIZE, SIZE), || 1.0);
+        let rhs = Array2::from_shape_fn((SIZE, SIZE), |(_, y)| (y) as f32);
+        let mut target = Array2::from_elem((SIZE, SIZE), UNINIT_F32);
 
         matmul32_extern(lhs.view(), rhs.view(), target.view_mut())
             .await
