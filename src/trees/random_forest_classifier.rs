@@ -1,3 +1,5 @@
+use core::num;
+
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 use rand::Rng;
 
@@ -14,7 +16,7 @@ pub enum MaxFeatureMode {
 }
 pub struct RandomForestClassifier {
     num_estimators: usize,
-    trees: Vec<RawClassificationTree>,
+    trees: Vec<(RawClassificationTree, Vec<usize>)>, //Vec<usize> for feature indices
     strategy: TrainTestSplitStrategy,
     data: TrainTestSplitStrategyData<f64, u32>,
     max_feature_mode: MaxFeatureMode,
@@ -24,10 +26,10 @@ impl RandomForestClassifier {
     pub fn new(num_estimators: usize) -> Self {
         RandomForestClassifier {
             num_estimators,
-            trees: vec![RawClassificationTree::default(); num_estimators],
+            trees: vec![(RawClassificationTree::default(), vec![]); num_estimators],
             strategy: TrainTestSplitStrategy::default(),
             data: TrainTestSplitStrategyData::default(),
-            max_feature_mode: MaxFeatureMode::Log,
+            max_feature_mode: MaxFeatureMode::Sqrt,
         }
     }
     pub fn strategy(self, strategy: TrainTestSplitStrategy) -> Self {
@@ -37,7 +39,7 @@ impl RandomForestClassifier {
         features: ArrayView2<f64>,
         labels: ArrayView1<u32>,
         max_features: usize,
-    ) -> (Array2<f64>, Array1<u32>) {
+    ) -> (Array2<f64>, Array1<u32>, Vec<usize>) {
         let mut b_indices = vec![0usize; features.nrows()];
         let mut b_features = vec![0usize; max_features];
         let mut rng = rand::thread_rng();
@@ -55,11 +57,9 @@ impl RandomForestClassifier {
             for fi in 0..max_features {
                 out_features[(ri, fi)] = features[(b_indices[ri], b_features[fi])];
             }
+            out_labels[ri] = labels[b_indices[ri]];
         }
-        for fi in 0..max_features {
-            out_labels[fi] = labels[b_features[fi]];
-        }
-        (out_features, out_labels)
+        (out_features, out_labels, b_features)
     }
     pub fn fit(&mut self, dataset: &BaseDataset, target: &str) {
         let target = dataset._get_string_index(target);
@@ -73,9 +73,10 @@ impl RandomForestClassifier {
             MaxFeatureMode::Sqrt => usize::max(f64::sqrt(features.ncols() as f64) as usize, 1),
         };
         for tree in &mut self.trees {
-            let (bootstrap_features, bootstrap_labels) =
+            let (bootstrap_features, bootstrap_labels, bootstrap_feature_indices) =
                 Self::bootstrap(features, labels, max_features);
-            tree.fit(bootstrap_features.view(), bootstrap_labels.view());
+            tree.0.fit(bootstrap_features.view(), bootstrap_labels.view());
+            tree.1 = bootstrap_feature_indices;
         }
     }
     fn for_each_unique<T>(array: &[T], mut func: impl FnMut(T) -> ())
@@ -104,7 +105,12 @@ impl RandomForestClassifier {
     pub fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
         let mut results = Array2::default((data.nrows(), self.trees.len()));
         self.trees.iter().enumerate().for_each(|(index, tree)| {
-            results.row_mut(index).assign(&tree.predict(data).view());
+            //is there a way to just view these instead of copying
+            let mut data_for_tree = Array2::default((data.nrows(), tree.1.len()));
+            for (idx, col) in tree.1.iter().enumerate() {
+                data_for_tree.column_mut(idx).assign(&data.column(*col));
+            }
+            results.column_mut(index).assign(&tree.0.predict(data_for_tree.view()).view());
         });
         let mut result = Array1::default(data.nrows());
         results
@@ -114,6 +120,7 @@ impl RandomForestClassifier {
             .for_each(|(index, res_row)| {
                 result[index] = Self::vote(res_row);
             });
+            
         result
     }
 
@@ -131,5 +138,29 @@ impl RandomForestClassifier {
         };
         let preds = self.predict(features);
         function(ground_truth, preds.view())
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::base_array::BaseDataset;
+    use crate::utils::metrics::accuracy;
+    use std::path::Path;
+    #[test]
+    fn test_random_forest_bi() {
+        let dataset = BaseDataset::from_csv(
+            Path::new("src/base_array/test_data/diabetes.csv"),
+            true,
+            true,
+            b',',
+        )
+        .unwrap();
+        let mut tree =
+            RandomForestClassifier::new(30).strategy(TrainTestSplitStrategy::TrainTest(0.7));
+        tree.fit(&dataset, "Outcome");
+        
+        let accuracy = tree.evaluate(accuracy);
+        dbg!(accuracy[0]);
+        debug_assert!(accuracy[0] > 0.70);
     }
 }
