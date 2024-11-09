@@ -163,4 +163,18 @@ mod tests {
         dbg!(accuracy[0]);
         debug_assert!(accuracy[0] > 0.70);
     }
+    #[test]
+    fn test_random_forest_multi() {
+        let dataset = BaseDataset::from_csv(
+            Path::new("src/base_array/test_data/IRIS.csv"),
+            true,
+            true,
+            b',',
+        ).unwrap();
+        let mut tree =
+            RandomForestClassifier::new(30).strategy(TrainTestSplitStrategy::TrainTest(0.7));
+        tree.fit(&dataset, "species");
+        let accuracy = tree.evaluate(accuracy)[0];
+        dbg!(accuracy);
+    }
 }
