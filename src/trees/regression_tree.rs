@@ -23,7 +23,7 @@ struct RegressionTreeNode {
     threshold: f64,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct RawRegressionTree {
     root: Option<Box<RegressionTreeNode>>,
     min_samples: usize,
@@ -31,11 +31,18 @@ pub struct RawRegressionTree {
 }
 
 impl RawRegressionTree {
-    fn fit(&mut self, features: ArrayView2<f64>, labels: ArrayView1<f64>) {
+    pub fn fit(&mut self, features: ArrayView2<f64>, labels: ArrayView1<f64>) {
         self.root =
             Some(self.build_internal(features, labels, Vec::from_iter(0..features.nrows()), 0));
     }
-    fn predict(&self, data: ArrayView2<f64>) -> Array1<f64> {
+    pub fn new() -> Self {
+        RawRegressionTree {
+            root: None,
+            min_samples: 10,
+            max_depth: 10
+        }
+    }
+    pub fn predict(&self, data: ArrayView2<f64>) -> Array1<f64> {
         let mut array = Array1::<f64>::default(data.nrows());
         let mut idx = 0usize;
         match &self.root {
@@ -234,7 +241,7 @@ impl RegressionTreeBuilder {
             strategy: TrainTestSplitStrategy::None,
             data: TrainTestSplitStrategyData::default(),
             scaler: ScalerState::default(),
-            tree: RawRegressionTree::default(),
+            tree: RawRegressionTree::new(),
         }
     }
 
@@ -366,7 +373,7 @@ mod tests {
         let mut tree =
             RegressionTreeBuilder::new().strategy(TrainTestSplitStrategy::TrainTest(0.7));
         tree.fit(&dataset, "MEDV");
-        //let rmse = tree.evaluate(root_mean_square_error);
-        //dbg!(rmse);
+        let rmse = tree.evaluate(root_mean_square_error);
+        dbg!(rmse);
     }
 }
