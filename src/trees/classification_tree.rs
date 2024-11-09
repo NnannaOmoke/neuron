@@ -23,7 +23,7 @@ struct ClassificationTreeNode {
     threshold: f64,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct RawClassificationTree {
     root: Option<Box<ClassificationTreeNode>>,
     min_samples: usize,
@@ -35,7 +35,14 @@ impl RawClassificationTree {
         self.root =
             Some(self.build_internal(features, labels, Vec::from_iter(0..features.nrows()), 0));
     }
-
+    //TODO: allow specifying these params in some way
+    pub fn new() -> Self {
+        RawClassificationTree {
+            root: None,
+            min_samples: 10,
+            max_depth: 10
+        }
+    }
     pub fn predict(&self, data: ArrayView2<f64>) -> Array1<u32> {
         let mut array = Array1::<u32>::default(data.nrows());
         let mut idx = 0usize;
@@ -236,7 +243,7 @@ impl ClassificationTreeBuilder {
             strategy: TrainTestSplitStrategy::None,
             scaler: ScalerState::default(),
             data: TrainTestSplitStrategyData::default(),
-            tree: RawClassificationTree::default(),
+            tree: RawClassificationTree::new(),
         }
     }
 

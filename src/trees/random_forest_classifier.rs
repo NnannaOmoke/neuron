@@ -26,7 +26,7 @@ impl RandomForestClassifier {
     pub fn new(num_estimators: usize) -> Self {
         RandomForestClassifier {
             num_estimators,
-            trees: vec![(RawClassificationTree::default(), vec![]); num_estimators],
+            trees: vec![(RawClassificationTree::new(), vec![]); num_estimators],
             strategy: TrainTestSplitStrategy::default(),
             data: TrainTestSplitStrategyData::default(),
             max_feature_mode: MaxFeatureMode::Sqrt,
