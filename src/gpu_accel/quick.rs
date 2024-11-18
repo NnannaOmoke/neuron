@@ -320,13 +320,34 @@ mod tests {
     const UNINIT_USIZE: usize = 0xaa_aa_aa_aa_aa_aa_aa_aa as usize;
     const UNINIT_F32: f32 = f32::from_bits(UNINIT_U32);
 
+    fn init_logger() {
+        // Only returns Err if already initialized, in which case we don't care so discard Err.
+        _ = env_logger::builder()
+            .filter_level(log::LevelFilter::Off)
+            // Desperate attempt to only show the logs for failed tests.
+            // This should work as normally, writes to stdout are captured and only displayed
+            // if the test fails. However, that does not seem to work here for some stupid
+            // reason even though it is still verifiably going to stdout.
+            .target(env_logger::Target::Stdout)
+            .parse_default_env()
+            .try_init();
+
+        // Don't worry; this _does_ only appear in the error message for failed tests.
+        println!(
+            // Yes the `\n   \` is necessary to get the indentation for the next line.
+            "\n\
+            !!!-------------------------------------------------------------------!!!\n   \
+               REMINDER: Run with RUST_LOG=WARN/INFO/DEBUG/TRACE to see wgpu logs.\n\
+            !!!-------------------------------------------------------------------!!!\n\
+            "
+        );
+    }
+
     #[tokio::test]
     async fn matmul32_extern_same_size_small() {
         const SIZE: usize = 3;
 
-        // env_logger::builder()
-        //     .filter_level(log::LevelFilter::Debug)
-        //     .init();
+        init_logger();
 
         let lhs = Array2::from_shape_fn((SIZE, SIZE), |(x, y)| (x + y * 3) as f32);
         let rhs = Array2::from_shape_fn((SIZE, SIZE), |(_, y)| (y + 1) as f32);
@@ -347,6 +368,8 @@ mod tests {
         // This obviously warrents further investigating.
         const SIZE: usize = 30;
 
+        init_logger();
+
         let lhs = Array2::from_shape_fn((SIZE, SIZE), |(x, y)| (x + y + 1) as f32);
         let rhs = Array2::from_shape_fn((SIZE, SIZE), |(x, y)| (x.pow(2) * y) as f32);
         let mut target = Array2::from_elem((SIZE, SIZE), UNINIT_F32);
@@ -361,6 +384,8 @@ mod tests {
     #[tokio::test]
     async fn matmul32_extern_same_size_large_mats() {
         const SIZE: usize = 2048;
+
+        init_logger();
 
         // These numbers are tuned such that even with 2048x2048 matrices, the numbers generated
         // will not be large enough to cause the issue tested by matmul32_extern_large_numbers.
